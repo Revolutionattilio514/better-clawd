@@ -100,7 +100,7 @@ function ModelPickerWrapper(t0) {
   }
   let t4;
   if ($[11] !== handleCancel || $[12] !== handleSelect || $[13] !== mainLoopModel || $[14] !== mainLoopModelForSession || $[15] !== t3) {
-    t4 = <ModelPicker initial={mainLoopModel} sessionModel={mainLoopModelForSession} onSelect={handleSelect} onCancel={handleCancel} isStandaloneCommand={true} showFastModeNotice={t3} />;
+    t4 = <ModelPicker initial={mainLoopModel} sessionModel={mainLoopModelForSession} onSelect={handleSelect} onCancel={handleCancel} isStandaloneCommand={true} showFastModeNotice={t3} allowCustomOpenRouterModelInput={true} />;
     $[11] = handleCancel;
     $[12] = handleSelect;
     $[13] = mainLoopModel;
@@ -277,7 +277,7 @@ export const call: LocalJSXCommandCall = async (onDone, _context, args) => {
     return <ShowModelAndClose onDone={onDone} />;
   }
   if (COMMON_HELP_ARGS.includes(args)) {
-    onDone('Run /model to open the model selection menu, or /model [modelName] to set the model.', {
+    onDone('Run /model to open the model selection menu, or /model [modelName] to set the model. OpenRouter users can also enter an exact model ID directly in the menu.', {
       display: 'system'
     });
     return;

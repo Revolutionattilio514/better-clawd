@@ -1,6 +1,6 @@
 {
   "name": "better-clawd",
-  "version": "0.1.5",
+  "version": "0.1.6",
   "description": "Claude Code, but better.",
   "type": "module",
   "bin": {
@@ -53,7 +53,7 @@
     "cli-highlight": "^2.1.0",
     "code-excerpt": "^4.0.0",
     "commander": "^12.0.0",
-    "diff": "^7.0.0",
+    "diff": "^8.0.4",
     "emoji-regex": "^10.4.0",
     "env-paths": "^3.0.0",
     "execa": "^9.5.0",
