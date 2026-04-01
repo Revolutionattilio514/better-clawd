@@ -4,7 +4,7 @@
 
 Better-Clawd exists because the original had a genuinely great core idea and too many self-inflicted problems around it. This fork keeps what worked, fixes what did not, and gives people real choice over how they log in, which provider they use, and how much of the product they actually want phoning home.
 
-No telemetry. No vendor lock-in. Better long-session performance. Less corporate baggage.
+No telemetry. No vendor lock-in. Faster startup, lower idle overhead, and better long-session performance than the original Claude Code. Less corporate baggage.
 
 [NPM package](https://www.npmjs.com/package/better-clawd) 
 
@@ -29,8 +29,17 @@ Better-Clawd is the response to that.
 - It keeps the good parts of the original UX
 - It removes telemetry and unnecessary phone-home behavior
 - It supports multiple providers without turning setup into a science project
-- It improves performance over the original Claude Code, especially in longer sessions
+- It improves performance over the original Claude Code, with better startup behavior, less idle background churn, and smoother long sessions
 - It is easier to inspect, modify, and run on your own terms
+
+## Performance
+
+Better-Clawd is intentionally tuned to be leaner than upstream Claude Code:
+
+- Lower startup and initialization cost
+- Less background polling and idle CPU churn
+- Better memory and render behavior during long transcript-heavy sessions
+- Focused performance workflow and regression checks in `PERFORMANCE.md`
 
 ## What Better-Clawd Changes
 
@@ -88,7 +97,7 @@ OPENROUTER_BASE_URL=https://openrouter.ai/api/v1
 ## What You Get
 
 - Better provider freedom
-- Better performance than the original Claude Code
+- Better performance than the original Claude Code across startup, idle usage, and long sessions
 - OpenAI and OpenRouter support without weird bolt-on hacks
 - Less phone-home behavior
 - A CLI that feels more practical, more open, and more yours

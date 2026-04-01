@@ -38,6 +38,8 @@ import {
 import { logForDebugging } from './debug.js'
 
 const CHECK_INTERVAL_MS = 1000
+const NO_TASKS_CHECK_DELAY_MS = 2000
+const MAX_CHECK_DELAY_MS = 5000
 const FILE_STABILITY_MS = 300
 // How often a non-owning session re-probes the scheduler lock. Coarse
 // because takeover only matters when the owning session has crashed.
@@ -57,6 +59,31 @@ export function isRecurringTaskAged(
 ): boolean {
   if (maxAgeMs === 0) return false
   return Boolean(t.recurring && !t.permanent && nowMs - t.createdAt >= maxAgeMs)
+}
+
+export function getSchedulerCheckDelayMs(
+  nextFireAtMs: number | null,
+  nowMs: number,
+  options?: {
+    minMs?: number
+    maxMs?: number
+    noTasksDelayMs?: number
+  },
+): number {
+  const minMs = options?.minMs ?? CHECK_INTERVAL_MS
+  const maxMs = options?.maxMs ?? MAX_CHECK_DELAY_MS
+  const noTasksDelayMs = options?.noTasksDelayMs ?? NO_TASKS_CHECK_DELAY_MS
+
+  if (nextFireAtMs === null) {
+    return noTasksDelayMs
+  }
+
+  const untilFireMs = nextFireAtMs - nowMs
+  if (untilFireMs <= minMs) {
+    return minMs
+  }
+
+  return Math.min(maxMs, Math.max(minMs, Math.floor(untilFireMs / 2)))
 }
 
 type CronSchedulerOptions = {
@@ -170,7 +197,7 @@ export function createCronScheduler(
   const inFlight = new Set<string>()
 
   let enablePoll: ReturnType<typeof setInterval> | null = null
-  let checkTimer: ReturnType<typeof setInterval> | null = null
+  let checkTimer: ReturnType<typeof setTimeout> | null = null
   let lockProbeTimer: ReturnType<typeof setInterval> | null = null
   let watcher: FSWatcher | null = null
   let stopped = false
@@ -189,7 +216,10 @@ export function createCronScheduler(
     // Recurring tasks are NOT surfaced or deleted — check() handles them
     // correctly (fires on first tick, reschedules forward). Only one-shot
     // missed tasks need user input (run once now, or discard forever).
-    if (!initial) return
+    if (!initial) {
+      scheduleCheck(CHECK_INTERVAL_MS)
+      return
+    }
 
     const now = Date.now()
     const missed = findMissedTasks(next, now).filter(
@@ -225,6 +255,7 @@ export function createCronScheduler(
         `[ScheduledTasks] surfaced ${missed.length} missed one-shot task(s)`,
       )
     }
+    scheduleCheck(CHECK_INTERVAL_MS)
   }
 
   function check() {
@@ -393,6 +424,29 @@ export function createCronScheduler(
     }
   }
 
+  function getNextFireTimeValue(): number | null {
+    let min = Infinity
+    for (const t of nextFireAt.values()) {
+      if (t < min) min = t
+    }
+    return min === Infinity ? null : min
+  }
+
+  function scheduleCheck(delayMs = CHECK_INTERVAL_MS): void {
+    if (stopped) return
+    if (checkTimer) {
+      clearTimeout(checkTimer)
+      checkTimer = null
+    }
+    checkTimer = setTimeout(() => {
+      checkTimer = null
+      if (stopped) return
+      check()
+      scheduleCheck(getSchedulerCheckDelayMs(getNextFireTimeValue(), Date.now()))
+    }, delayMs)
+    checkTimer.unref?.()
+  }
+
   async function enable() {
     if (stopped) return
     if (enablePoll) {
@@ -450,13 +504,11 @@ export function createCronScheduler(
       if (!stopped) {
         tasks = []
         nextFireAt.clear()
+        scheduleCheck(NO_TASKS_CHECK_DELAY_MS)
       }
     })
 
-    checkTimer = setInterval(check, CHECK_INTERVAL_MS)
-    // Don't keep the process alive for the scheduler alone — in -p text mode
-    // the process should exit after the single turn even if a cron was created.
-    checkTimer.unref?.()
+    scheduleCheck(CHECK_INTERVAL_MS)
   }
 
   return {
@@ -503,7 +555,7 @@ export function createCronScheduler(
         enablePoll = null
       }
       if (checkTimer) {
-        clearInterval(checkTimer)
+        clearTimeout(checkTimer)
         checkTimer = null
       }
       if (lockProbeTimer) {
@@ -521,11 +573,7 @@ export function createCronScheduler(
       // nextFireAt uses Infinity for "never" (in-flight one-shots, bad cron
       // strings). Filter those out so callers can distinguish "soon" from
       // "nothing pending".
-      let min = Infinity
-      for (const t of nextFireAt.values()) {
-        if (t < min) min = t
-      }
-      return min === Infinity ? null : min
+      return getNextFireTimeValue()
     },
   }
 }

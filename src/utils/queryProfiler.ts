@@ -27,9 +27,13 @@
  * - query_end: End of query
  */
 
+import { join } from 'path'
+import { getSessionId } from 'src/bootstrap/state.js'
 import { logForDebugging } from './debug.js'
-import { isEnvTruthy } from './envUtils.js'
+import { getClaudeConfigHomeDir, isEnvTruthy } from './envUtils.js'
+import { getFsImplementation } from './fsOperations.js'
 import { formatMs, formatTimelineLine, getPerformance } from './profilerBase.js'
+import { writeFileSync_DEPRECATED } from './slowOperations.js'
 
 // Module-level state - initialized once when the module loads
 // eslint-disable-next-line custom-rules/no-process-env-top-level
@@ -210,6 +214,14 @@ function getQueryProfileReport(): string {
   return lines.join('\n')
 }
 
+export function getQueryPerfLogPath(queryNumber = queryCount): string {
+  return join(
+    getClaudeConfigHomeDir(),
+    'query-perf',
+    `${getSessionId()}-q${queryNumber}.txt`,
+  )
+}
+
 /**
  * Get phase-based summary showing time spent in each major phase
  */
@@ -297,5 +309,17 @@ function getPhaseSummary(
  */
 export function logQueryProfileReport(): void {
   if (!ENABLED) return
-  logForDebugging(getQueryProfileReport())
+  const report = getQueryProfileReport()
+  logForDebugging(report)
+
+  try {
+    const path = getQueryPerfLogPath()
+    getFsImplementation().mkdirSync(join(getClaudeConfigHomeDir(), 'query-perf'))
+    writeFileSync_DEPRECATED(path, report, {
+      encoding: 'utf8',
+      flush: true,
+    })
+  } catch {
+    // Best-effort artifact write. Debug output above still preserves the report.
+  }
 }

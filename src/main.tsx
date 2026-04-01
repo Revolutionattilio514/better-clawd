@@ -37,7 +37,6 @@ import { hasGrowthBookEnvOverride, initializeGrowthBook, refreshGrowthBookAfterA
 import { fetchBootstrapData } from './services/api/bootstrap.js';
 import { type DownloadResult, downloadSessionFiles, type FilesApiConfig, parseFileSpecs } from './services/api/filesApi.js';
 import { prefetchPassesEligibility } from './services/api/referral.js';
-import { prefetchOfficialMcpUrls } from './services/mcp/officialRegistry.js';
 import type { McpSdkServerConfig, McpServerConfig, ScopedMcpServerConfig } from './services/mcp/types.js';
 import { isPolicyAllowed, loadPolicyLimits, refreshPolicyLimits, waitForPolicyLimitsToLoad } from './services/policyLimits/index.js';
 import { loadRemoteManagedSettings, refreshRemoteManagedSettings } from './services/remoteManagedSettings/index.js';
@@ -58,8 +57,6 @@ import { createSystemMessage, createUserMessage } from './utils/messages.js';
 import { getPlatform } from './utils/platform.js';
 import { getBaseRenderOptions } from './utils/renderOptions.js';
 import { getSessionIngressAuthToken } from './utils/sessionIngressAuth.js';
-import { settingsChangeDetector } from './utils/settings/changeDetector.js';
-import { skillChangeDetector } from './utils/skills/skillChangeDetector.js';
 import { jsonParse, writeFileSync_DEPRECATED } from './utils/slowOperations.js';
 import { computeInitialTeamContext } from './utils/swarm/reconnection.js';
 import { initializeWarningHandler } from './utils/warningHandler.js';
@@ -90,12 +87,10 @@ import type { StatsStore } from './context/stats.js';
 import { launchAssistantInstallWizard, launchAssistantSessionChooser, launchInvalidSettingsDialog, launchResumeChooser, launchSnapshotUpdateDialog, launchTeleportRepoMismatchDialog, launchTeleportResumeWrapper } from './dialogLaunchers.js';
 import { SHOW_CURSOR } from './ink/termio/dec.js';
 import { exitWithError, exitWithMessage, getRenderContext, renderAndRun, showSetupScreens } from './interactiveHelpers.js';
-import { initBuiltinPlugins } from './plugins/bundled/index.js';
 /* eslint-enable @typescript-eslint/no-require-imports */
 import { checkQuotaStatus } from './services/claudeAiLimits.js';
 import { getMcpToolsCommandsAndResources, prefetchAllMcpResources } from './services/mcp/client.js';
 import { VALID_INSTALLABLE_SCOPES, VALID_UPDATE_SCOPES } from './services/plugins/pluginCliCommands.js';
-import { initBundledSkills } from './skills/bundled/index.js';
 import type { AgentColorName } from './tools/AgentTool/agentColorManager.js';
 import { getActiveAgentsFromList, getAgentDefinitionsWithOverrides, isBuiltInAgent, isCustomAgent, parseAgentsFromJson } from './tools/AgentTool/loadAgentsDir.js';
 import type { LogOption } from './types/logs.js';
@@ -119,8 +114,6 @@ import { getDefaultMainLoopModel, getUserSpecifiedModelSetting, normalizeModelSt
 import { ensureModelStringsInitialized } from './utils/model/modelStrings.js';
 import { PERMISSION_MODES } from './utils/permissions/PermissionMode.js';
 import { checkAndDisableBypassPermissions, getAutoModeEnabledStateIfCached, initializeToolPermissionContext, initialPermissionModeFromCLI, isDefaultPermissionModeAuto, parseToolListFromCLI, removeDangerousPermissions, stripDangerousPermissionsForAutoMode, verifyAutoModeGateAccess } from './utils/permissions/permissionSetup.js';
-import { cleanupOrphanedPluginVersionsInBackground } from './utils/plugins/cacheUtils.js';
-import { initializeVersionedPlugins } from './utils/plugins/installedPluginsManager.js';
 import { getManagedPluginNames } from './utils/plugins/managedPlugins.js';
 import { getGlobExclusionsForPluginCache } from './utils/plugins/orphanedPluginFilter.js';
 import { getPluginSeedDirs } from './utils/plugins/pluginDirectories.js';
@@ -146,7 +139,6 @@ import { clearServerCache } from 'src/services/mcp/client.js';
 import { areMcpConfigsAllowedWithEnterpriseMcpConfig, dedupClaudeAiMcpServers, doesEnterpriseMcpConfigExist, filterMcpServersByPolicy, getClaudeCodeMcpConfigs, getMcpServerSignature, parseMcpConfig, parseMcpConfigFromFilePath } from 'src/services/mcp/config.js';
 import { excludeCommandsByServer, excludeResourcesByServer } from 'src/services/mcp/utils.js';
 import { isXaaEnabled } from 'src/services/mcp/xaaIdpLogin.js';
-import { getRelevantTips } from 'src/services/tips/tipRegistry.js';
 import { logContextMetrics } from 'src/utils/api.js';
 import { CLAUDE_IN_CHROME_MCP_SERVER_NAME, isClaudeInChromeMCPServer } from 'src/utils/claudeInChrome/common.js';
 import { registerCleanup } from 'src/utils/cleanupRegistry.js';
@@ -159,7 +151,6 @@ import { errorMessage, getErrnoCode, isENOENT, TeleportOperationError, toError }
 import { getFsImplementation, safeResolvePath } from 'src/utils/fsOperations.js';
 import { gracefulShutdown, gracefulShutdownSync } from 'src/utils/gracefulShutdown.js';
 import { setAllHookEventsEnabled } from 'src/utils/hooks/hookEvents.js';
-import { refreshModelCapabilities } from 'src/utils/model/modelCapabilities.js';
 import { peekForStdinData, writeToStderr } from 'src/utils/process.js';
 import { setCwd } from 'src/utils/Shell.js';
 import { type ProcessedResume, processResumedConversation } from 'src/utils/sessionRestore.js';
@@ -379,6 +370,32 @@ function prefetchSystemContextIfSafe(): void {
   // Otherwise, don't prefetch - wait for trust to be established first
 }
 
+function runDeferredStartupTask(
+  label: string,
+  task: () => Promise<void>,
+): void {
+  void task().catch(error => {
+    logForDebugging(
+      `[STARTUP] deferred ${label} failed: ${errorMessage(error)}`,
+      { level: 'warn' },
+    );
+  });
+}
+
+async function runPluginRuntimeBookkeeping(): Promise<void> {
+  const [
+    { initializeVersionedPlugins },
+    { cleanupOrphanedPluginVersionsInBackground },
+  ] = await Promise.all([
+    import('./utils/plugins/installedPluginsManager.js'),
+    import('./utils/plugins/cacheUtils.js'),
+  ]);
+  await initializeVersionedPlugins();
+  profileCheckpoint('action_after_plugins_init');
+  await cleanupOrphanedPluginVersionsInBackground();
+  void getGlobExclusionsForPluginCache();
+}
+
 /**
  * Start background prefetches and housekeeping that are NOT needed before first render.
  * These are deferred from setup() to reduce event loop contention and child process
@@ -404,7 +421,10 @@ export function startDeferredPrefetches(): void {
   void initUser();
   void getUserContext();
   prefetchSystemContextIfSafe();
-  void getRelevantTips();
+  runDeferredStartupTask('tips prefetch', async () => {
+    const { getRelevantTips } = await import('./services/tips/tipRegistry.js');
+    await getRelevantTips();
+  });
   if (isEnvTruthy(process.env.CLAUDE_CODE_USE_BEDROCK) && !isEnvTruthy(process.env.CLAUDE_CODE_SKIP_BEDROCK_AUTH)) {
     void prefetchAwsCredentialsAndBedRockInfoIfSafe();
   }
@@ -415,13 +435,25 @@ export function startDeferredPrefetches(): void {
 
   // Analytics and feature flag initialization
   void initializeAnalyticsGates();
-  void prefetchOfficialMcpUrls();
-  void refreshModelCapabilities();
+  runDeferredStartupTask('official MCP registry prefetch', async () => {
+    const { prefetchOfficialMcpUrls } = await import('./services/mcp/officialRegistry.js');
+    await prefetchOfficialMcpUrls();
+  });
+  runDeferredStartupTask('model capabilities refresh', async () => {
+    const { refreshModelCapabilities } = await import('./utils/model/modelCapabilities.js');
+    await refreshModelCapabilities();
+  });
 
   // File change detectors deferred from init() to unblock first render
-  void settingsChangeDetector.initialize();
+  runDeferredStartupTask('settings change detector', async () => {
+    const { settingsChangeDetector } = await import('./utils/settings/changeDetector.js');
+    await settingsChangeDetector.initialize();
+  });
   if (!isBareMode()) {
-    void skillChangeDetector.initialize();
+    runDeferredStartupTask('skill change detector', async () => {
+      const { skillChangeDetector } = await import('./utils/skills/skillChangeDetector.js');
+      await skillChangeDetector.initialize();
+    });
   }
 
   // Event loop stall detector — logs when the main thread is blocked >500ms
@@ -1921,6 +1953,10 @@ async function run(): Promise<CommanderCommand> {
     // reads synchronously. Previously ran inside setup() after ~20ms of
     // await points, so the parallel getCommands() memoized an empty list.
     if (process.env.CLAUDE_CODE_ENTRYPOINT !== 'local-agent') {
+      const [{ initBuiltinPlugins }, { initBundledSkills }] = await Promise.all([
+        import('./plugins/bundled/index.js'),
+        import('./skills/bundled/index.js'),
+      ]);
       initBuiltinPlugins();
       initBundledSkills();
     }
@@ -2556,17 +2592,11 @@ async function run(): Promise<CommanderCommand> {
       // skip — no-op
     } else if (isNonInteractiveSession) {
       // In headless mode, await to ensure plugin sync completes before CLI exits
-      await initializeVersionedPlugins();
-      profileCheckpoint('action_after_plugins_init');
-      void cleanupOrphanedPluginVersionsInBackground().then(() => getGlobExclusionsForPluginCache());
+      await runPluginRuntimeBookkeeping();
     } else {
       // In interactive mode, fire-and-forget — this is purely bookkeeping
       // that doesn't affect runtime behavior of the current session
-      void initializeVersionedPlugins().then(async () => {
-        profileCheckpoint('action_after_plugins_init');
-        await cleanupOrphanedPluginVersionsInBackground();
-        void getGlobExclusionsForPluginCache();
-      });
+      void runPluginRuntimeBookkeeping().catch(error => logError(toError(error)));
     }
     const setupTrigger = initOnly || init ? 'init' : maintenance ? 'maintenance' : null;
     if (initOnly) {

@@ -150,6 +150,7 @@ import { useMergedTools } from '../hooks/useMergedTools.js';
 import { mergeAndFilterTools } from '../utils/toolPool.js';
 import { useMergedCommands } from '../hooks/useMergedCommands.js';
 import { useSkillsChange } from '../hooks/useSkillsChange.js';
+import { useSettingsChange } from '../hooks/useSettingsChange.js';
 import { useManagePlugins } from '../hooks/useManagePlugins.js';
 import { Messages } from '../components/Messages.js';
 import { TaskListV2 } from '../components/TaskListV2.js';
@@ -294,6 +295,32 @@ import { createAttachmentMessage, getQueuedCommandAttachments } from '../utils/a
 const EMPTY_MCP_CLIENTS: MCPServerConnection[] = [];
 const EMPTY_TOOL_USE_CONFIRM_QUEUE: ToolUseConfirm[] = [];
 const EMPTY_IN_PROGRESS_TOOL_USE_IDS = new Set<string>();
+
+type TurnContextSnapshot = {
+  key: string;
+  defaultSystemPrompt: string[];
+  userContext: {
+    [k: string]: string;
+  };
+  systemContext: {
+    [k: string]: string;
+  };
+};
+
+function getMcpContextSignature(mcpClients: MCPServerConnection[]): string {
+  return mcpClients.map(client => {
+    if (client.type === 'connected') {
+      return [client.name, client.config.type ?? 'stdio', client.instructions ?? ''].join('::');
+    }
+    return [client.name, client.type].join('::');
+  }).join('||');
+}
+
+function buildTurnContextCacheKey(model: string, tools: ReadonlyArray<{
+  name: string;
+}>, additionalWorkingDirectories: readonly string[], mcpClients: MCPServerConnection[]): string {
+  return [model, tools.map(tool => tool.name).sort().join('|'), additionalWorkingDirectories.join('|'), getMcpContextSignature(mcpClients)].join('|||');
+}
 
 // Stable stub for useAssistantHistory's non-KAIROS branch — avoids a new
 // function identity each render, which would break composedOnScroll's memo.
@@ -681,9 +708,16 @@ export function REPL({
 
   // Local state for commands (hot-reloadable when skill files change)
   const [localCommands, setLocalCommands] = useState(initialCommands);
+  const turnContextCacheRef = useRef<TurnContextSnapshot | null>(null);
 
   // Watch for skill file changes and reload all commands
   useSkillsChange(isRemoteSession ? undefined : getProjectRoot(), setLocalCommands);
+  useEffect(() => {
+    turnContextCacheRef.current = null;
+  }, [localCommands]);
+  useSettingsChange(() => {
+    turnContextCacheRef.current = null;
+  });
 
   // Track proactive mode for tools dependency - SleepTool filters by proactive state
   const proactiveActive = React.useSyncExternalStore(proactiveModule?.subscribeToProactiveChanges ?? PROACTIVE_NO_OP_SUBSCRIBE, proactiveModule?.isProactiveActive ?? PROACTIVE_FALSE);
@@ -2531,6 +2565,23 @@ export function REPL({
       contentReplacementState: contentReplacementStateRef.current
     };
   }, [commands, combinedInitialTools, mainThreadAgentDefinition, debug, initialMcpClients, ideInstallationStatus, dynamicMcpConfig, theme, allowedAgentTypes, store, setAppState, reverify, addNotification, setMessages, onChangeDynamicMcpConfig, resume, requestPrompt, disabled, customSystemPrompt, appendSystemPrompt, setConversationId]);
+  const loadTurnContext = useCallback(async (toolsForPrompt: typeof combinedInitialTools, mcpClientsForPrompt: MCPServerConnection[], model: string): Promise<TurnContextSnapshot> => {
+    const additionalWorkingDirectories = Array.from(toolPermissionContext.additionalWorkingDirectories.keys());
+    const cacheKey = buildTurnContextCacheKey(model, toolsForPrompt, additionalWorkingDirectories, mcpClientsForPrompt);
+    const cached = turnContextCacheRef.current;
+    if (cached?.key === cacheKey) {
+      return cached;
+    }
+    const [defaultSystemPrompt, userContext, systemContext] = await Promise.all([getSystemPrompt(toolsForPrompt, model, additionalWorkingDirectories, mcpClientsForPrompt), getUserContext(), getSystemContext()]);
+    const next = {
+      key: cacheKey,
+      defaultSystemPrompt,
+      userContext,
+      systemContext
+    };
+    turnContextCacheRef.current = next;
+    return next;
+  }, [toolPermissionContext]);
 
   // Session backgrounding (Ctrl+B to background/foreground)
   const handleBackgroundQuery = useCallback(() => {
@@ -2542,7 +2593,11 @@ export function REPL({
     const removedNotifications = removeByFilter(cmd => cmd.mode === 'task-notification');
     void (async () => {
       const toolUseContext = getToolUseContext(messagesRef.current, [], new AbortController(), mainLoopModel);
-      const [defaultSystemPrompt, userContext, systemContext] = await Promise.all([getSystemPrompt(toolUseContext.options.tools, mainLoopModel, Array.from(toolPermissionContext.additionalWorkingDirectories.keys()), toolUseContext.options.mcpClients), getUserContext(), getSystemContext()]);
+      const {
+        defaultSystemPrompt,
+        userContext,
+        systemContext
+      } = await loadTurnContext(toolUseContext.options.tools, toolUseContext.options.mcpClients, mainLoopModel);
       const systemPrompt = buildEffectiveSystemPrompt({
         mainThreadAgentDefinition,
         toolUseContext,
@@ -2581,7 +2636,7 @@ export function REPL({
         agentDefinition: mainThreadAgentDefinition
       });
     })();
-  }, [abortController, mainLoopModel, toolPermissionContext, mainThreadAgentDefinition, getToolUseContext, customSystemPrompt, appendSystemPrompt, canUseTool, setAppState]);
+  }, [abortController, mainLoopModel, mainThreadAgentDefinition, getToolUseContext, customSystemPrompt, appendSystemPrompt, canUseTool, setAppState, loadTurnContext]);
   const {
     handleBackgroundSession
   } = useSessionBackgrounding({
@@ -2775,11 +2830,16 @@ export function REPL({
       });
     }
     queryCheckpoint('query_context_loading_start');
-    const [,, defaultSystemPrompt, baseUserContext, systemContext] = await Promise.all([
+    const [,, turnContext] = await Promise.all([
     // IMPORTANT: do this after setMessages() above, to avoid UI jank
     checkAndDisableBypassPermissionsIfNeeded(toolPermissionContext, setAppState),
     // Gated on TRANSCRIPT_CLASSIFIER so GrowthBook kill switch runs wherever auto mode is built in
-    feature('TRANSCRIPT_CLASSIFIER') ? checkAndDisableAutoModeIfNeeded(toolPermissionContext, setAppState, store.getState().fastMode) : undefined, getSystemPrompt(freshTools, mainLoopModelParam, Array.from(toolPermissionContext.additionalWorkingDirectories.keys()), freshMcpClients), getUserContext(), getSystemContext()]);
+    feature('TRANSCRIPT_CLASSIFIER') ? checkAndDisableAutoModeIfNeeded(toolPermissionContext, setAppState, store.getState().fastMode) : undefined, loadTurnContext(freshTools, freshMcpClients, mainLoopModelParam)]);
+    const {
+      defaultSystemPrompt,
+      userContext: baseUserContext,
+      systemContext
+    } = turnContext;
     const userContext = {
       ...baseUserContext,
       ...getCoordinatorUserContext(freshMcpClients, isScratchpadEnabled() ? getScratchpadDir() : undefined),
@@ -2861,7 +2921,7 @@ export function REPL({
 
     // Signal that a query turn has completed successfully
     await onTurnComplete?.(messagesRef.current);
-  }, [initialMcpClients, resetLoadingState, getToolUseContext, toolPermissionContext, setAppState, customSystemPrompt, onTurnComplete, appendSystemPrompt, canUseTool, mainThreadAgentDefinition, onQueryEvent, sessionTitle, titleDisabled]);
+  }, [initialMcpClients, resetLoadingState, getToolUseContext, toolPermissionContext, setAppState, customSystemPrompt, onTurnComplete, appendSystemPrompt, canUseTool, mainThreadAgentDefinition, onQueryEvent, sessionTitle, titleDisabled, loadTurnContext]);
   const onQuery = useCallback(async (newMessages: MessageType[], abortController: AbortController, shouldQuery: boolean, additionalAllowedTools: string[], mainLoopModelParam: string, onBeforeQueryCallback?: (input: string, newMessages: MessageType[]) => Promise<boolean>, input?: string, effort?: EffortValue): Promise<void> => {
     // If this is a teammate, mark them as active when starting a turn
     if (isAgentSwarmsEnabled()) {
@@ -4941,8 +5001,11 @@ export function REPL({
             }
             const newAbortController = createAbortController();
             const context = getToolUseContext(compactMessages, [], newAbortController, mainLoopModel);
-            const appState = context.getAppState();
-            const defaultSysPrompt = await getSystemPrompt(context.options.tools, context.options.mainLoopModel, Array.from(appState.toolPermissionContext.additionalWorkingDirectories.keys()), context.options.mcpClients);
+            const {
+              defaultSystemPrompt: defaultSysPrompt,
+              userContext,
+              systemContext
+            } = await loadTurnContext(context.options.tools, context.options.mcpClients, context.options.mainLoopModel);
             const systemPrompt = buildEffectiveSystemPrompt({
               mainThreadAgentDefinition: undefined,
               toolUseContext: context,
@@ -4950,7 +5013,6 @@ export function REPL({
               defaultSystemPrompt: defaultSysPrompt,
               appendSystemPrompt: context.options.appendSystemPrompt
             });
-            const [userContext, systemContext] = await Promise.all([getUserContext(), getSystemContext()]);
             const result = await partialCompactConversation(compactMessages, messageIndex, context, {
               systemPrompt,
               userContext,

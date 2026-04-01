@@ -10,12 +10,16 @@ import { requireComputerUseSwift } from './swiftLoader.js'
  * promises hang. Electron drains it via CFRunLoop so Cowork doesn't need this.
  *
  * One refcounted setInterval calls `_drainMainRunLoop` (RunLoop.main.run)
- * every 1ms while any main-queue-dependent call is pending. Multiple
+ * every few milliseconds while any main-queue-dependent call is pending. Multiple
  * concurrent drainRunLoop() calls share the single pump via retain/release.
  */
 
 let pump: ReturnType<typeof setInterval> | undefined
 let pending = 0
+const DRAIN_INTERVAL_MS = Math.max(
+  1,
+  Number.parseInt(process.env.CLAUDE_CODE_COMPUTER_USE_PUMP_MS || '', 10) || 4,
+)
 
 function drainTick(cu: ReturnType<typeof requireComputerUseSwift>): void {
   cu._drainMainRunLoop()
@@ -24,7 +28,8 @@ function drainTick(cu: ReturnType<typeof requireComputerUseSwift>): void {
 function retain(): void {
   pending++
   if (pump === undefined) {
-    pump = setInterval(drainTick, 1, requireComputerUseSwift())
+    pump = setInterval(drainTick, DRAIN_INTERVAL_MS, requireComputerUseSwift())
+    pump.unref?.()
     logForDebugging('[drainRunLoop] pump started', { level: 'verbose' })
   }
 }

@@ -1,6 +1,6 @@
 {
   "name": "better-clawd",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Claude Code, but better.",
   "type": "module",
   "bin": {
@@ -16,6 +16,9 @@
     "build": "bun run scripts/build.ts",
     "start": "node dist/cli.mjs",
     "typecheck": "tsc --noEmit",
+    "perf:startup": "bun run build && bun run scripts/perf.ts startup --",
+    "perf:query": "bun run build && bun run scripts/perf.ts query --",
+    "perf:regression": "bun test src/utils/task/TaskOutput.test.ts src/utils/cronScheduler.test.ts src/services/tools/toolOrchestration.test.ts",
     "smoke": "bun run build && node dist/cli.mjs --version",
     "prepack": "npm run build"
   },

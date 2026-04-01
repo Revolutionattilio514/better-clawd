@@ -5,9 +5,12 @@ import { readFileRange, tailFile } from '../fsOperations.js'
 import { getMaxOutputLength } from '../shell/outputLimits.js'
 import { safeJoinLines } from '../stringUtils.js'
 import { DiskTaskOutput, getTaskOutputPath } from './diskOutput.js'
+import {
+  ACTIVE_TASK_OUTPUT_POLL_INTERVAL_MS,
+  getNextTaskOutputPollIntervalMs,
+} from './taskOutputPolling.js'
 
 const DEFAULT_MAX_MEMORY = 8 * 1024 * 1024 // 8MB
-const POLL_INTERVAL_MS = 1000
 const PROGRESS_TAIL_BYTES = 4096
 
 type ProgressCallback = (
@@ -54,6 +57,8 @@ export class TaskOutput {
   /** Subset of #registry currently being polled (visibility-driven by React). */
   static #activePolling = new Map<string, TaskOutput>()
   static #pollInterval: ReturnType<typeof setInterval> | null = null
+  static #pollIntervalMs = ACTIVE_TASK_OUTPUT_POLL_INTERVAL_MS
+  static #tickInFlight = false
 
   constructor(
     taskId: string,
@@ -84,10 +89,7 @@ export class TaskOutput {
       return
     }
     TaskOutput.#activePolling.set(taskId, instance)
-    if (!TaskOutput.#pollInterval) {
-      TaskOutput.#pollInterval = setInterval(TaskOutput.#tick, POLL_INTERVAL_MS)
-      TaskOutput.#pollInterval.unref()
-    }
+    TaskOutput.#setPollInterval(ACTIVE_TASK_OUTPUT_POLL_INTERVAL_MS)
   }
 
   /**
@@ -99,20 +101,52 @@ export class TaskOutput {
     if (TaskOutput.#activePolling.size === 0 && TaskOutput.#pollInterval) {
       clearInterval(TaskOutput.#pollInterval)
       TaskOutput.#pollInterval = null
+      TaskOutput.#pollIntervalMs = ACTIVE_TASK_OUTPUT_POLL_INTERVAL_MS
     }
+  }
+
+  static #setPollInterval(intervalMs: number): void {
+    TaskOutput.#pollIntervalMs = intervalMs
+    if (TaskOutput.#pollInterval) {
+      clearInterval(TaskOutput.#pollInterval)
+      TaskOutput.#pollInterval = null
+    }
+    if (TaskOutput.#activePolling.size === 0) {
+      return
+    }
+    TaskOutput.#pollInterval = setInterval(TaskOutput.#tick, intervalMs)
+    TaskOutput.#pollInterval.unref()
   }
 
   /**
    * Shared tick: reads the file tail for every actively-polled task.
-   * Non-async body (.then) to avoid stacking if I/O is slow.
+   * Skip overlapping ticks so slow I/O does not stack more work.
    */
   static #tick(): void {
-    for (const [, entry] of TaskOutput.#activePolling) {
-      if (!entry.#onProgress) {
-        continue
-      }
-      void tailFile(entry.path, PROGRESS_TAIL_BYTES).then(
-        ({ content, bytesRead, bytesTotal }) => {
+    if (TaskOutput.#tickInFlight) {
+      return
+    }
+    TaskOutput.#tickInFlight = true
+    void TaskOutput.#runTick().finally(() => {
+      TaskOutput.#tickInFlight = false
+    })
+  }
+
+  static async #runTick(): Promise<void> {
+    let sawActivity = false
+    await Promise.all(
+      Array.from(TaskOutput.#activePolling.values(), async entry => {
+        if (!entry.#onProgress) {
+          return
+        }
+        try {
+          const { content, bytesRead, bytesTotal } = await tailFile(
+            entry.path,
+            PROGRESS_TAIL_BYTES,
+          )
+          const bytesChanged = bytesTotal !== entry.#totalBytes
+          sawActivity = sawActivity || bytesChanged
+
           if (!entry.#onProgress) {
             return
           }
@@ -120,6 +154,7 @@ export class TaskOutput {
           // progress loop wakes up and can check for backgrounding.
           // Commands like `git log -S` produce no output for long periods.
           if (!content) {
+            entry.#totalBytes = bytesTotal
             entry.#onProgress('', '', entry.#totalLines, bytesTotal, false)
             return
           }
@@ -155,11 +190,18 @@ export class TaskOutput {
             bytesTotal,
             bytesRead < bytesTotal,
           )
-        },
-        () => {
+        } catch {
           // File may not exist yet
-        },
-      )
+        }
+      }),
+    )
+
+    const nextIntervalMs = getNextTaskOutputPollIntervalMs(
+      TaskOutput.#pollIntervalMs,
+      sawActivity,
+    )
+    if (nextIntervalMs !== TaskOutput.#pollIntervalMs) {
+      TaskOutput.#setPollInterval(nextIntervalMs)
     }
   }
 

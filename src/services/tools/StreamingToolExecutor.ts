@@ -9,6 +9,7 @@ import { findToolByName, type Tools, type ToolUseContext } from '../../Tool.js'
 import { BASH_TOOL_NAME } from '../../tools/BashTool/toolName.js'
 import type { AssistantMessage, Message } from '../../types/message.js'
 import { createChildAbortController } from '../../utils/abortController.js'
+import { getMaxToolUseConcurrency } from './toolConcurrency.js'
 import { runToolUse } from './toolExecution.js'
 
 type MessageUpdate = {
@@ -29,6 +30,20 @@ type TrackedTool = {
   // Progress messages are stored separately and yielded immediately
   pendingProgress: Message[]
   contextModifiers?: Array<(context: ToolUseContext) => ToolUseContext>
+}
+
+const EPHEMERAL_PROGRESS_TYPES = new Set([
+  'bash_progress',
+  'powershell_progress',
+  'mcp_progress',
+  'sleep_progress',
+])
+
+function isEphemeralProgressMessage(message: Message): boolean {
+  return (
+    message.type === 'progress' &&
+    EPHEMERAL_PROGRESS_TYPES.has(message.data.type)
+  )
 }
 
 /**
@@ -128,10 +143,13 @@ export class StreamingToolExecutor {
    */
   private canExecuteTool(isConcurrencySafe: boolean): boolean {
     const executingTools = this.tools.filter(t => t.status === 'executing')
-    return (
-      executingTools.length === 0 ||
-      (isConcurrencySafe && executingTools.every(t => t.isConcurrencySafe))
-    )
+    if (executingTools.length === 0) {
+      return true
+    }
+    if (!isConcurrencySafe || !executingTools.every(t => t.isConcurrencySafe)) {
+      return false
+    }
+    return executingTools.length < getMaxToolUseConcurrency()
   }
 
   /**
@@ -366,7 +384,17 @@ export class StreamingToolExecutor {
         if (update.message) {
           // Progress messages go to pendingProgress for immediate yielding
           if (update.message.type === 'progress') {
-            tool.pendingProgress.push(update.message)
+            const lastPending = tool.pendingProgress.at(-1)
+            if (
+              isEphemeralProgressMessage(update.message) &&
+              lastPending?.type === 'progress' &&
+              lastPending.data.type === update.message.data.type
+            ) {
+              tool.pendingProgress[tool.pendingProgress.length - 1] =
+                update.message
+            } else {
+              tool.pendingProgress.push(update.message)
+            }
             // Signal that progress is available
             if (this.progressAvailableResolve) {
               this.progressAvailableResolve()

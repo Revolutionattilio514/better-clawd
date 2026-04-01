@@ -544,9 +544,21 @@ export async function runHeadless(
     proactiveModule.activateProactive('command')
   }
 
-  // Periodically force a full GC to keep memory usage in check
+  // Headless sessions can run for a long time, but forcing a full GC every
+  // second burns CPU even when memory is healthy. Poll less often and only
+  // collect aggressively once the heap is actually elevated, unless the user
+  // explicitly opts into the old behavior for profiling/debugging.
   if (typeof Bun !== 'undefined') {
-    const gcTimer = setInterval(Bun.gc, 1000)
+    const GC_INTERVAL_MS = 15_000
+    const GC_HEAP_THRESHOLD_BYTES = 768 * 1024 * 1024
+    const gcTimer = setInterval(() => {
+      if (
+        isEnvTruthy(process.env.CLAUDE_CODE_FORCE_PERIODIC_GC) ||
+        process.memoryUsage().heapUsed >= GC_HEAP_THRESHOLD_BYTES
+      ) {
+        Bun.gc(true)
+      }
+    }, GC_INTERVAL_MS)
     gcTimer.unref()
   }
 
