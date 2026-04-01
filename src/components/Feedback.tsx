@@ -1,4 +1,3 @@
-import axios from 'axios';
 import { readFile, stat } from 'fs/promises';
 import * as React from 'react';
 import { useCallback, useEffect, useState } from 'react';
@@ -13,14 +12,12 @@ import { useKeybinding } from '../keybindings/useKeybinding.js';
 import { queryHaiku } from '../services/api/claude.js';
 import { startsWithApiErrorPrefix } from '../services/api/errors.js';
 import type { Message } from '../types/message.js';
-import { checkAndRefreshOAuthTokenIfNeeded } from '../utils/auth.js';
 import { openBrowser } from '../utils/browser.js';
+import { PRODUCT_ISSUES_URL, PRODUCT_NAME } from '../constants/product.js';
 import { logForDebugging } from '../utils/debug.js';
 import { env } from '../utils/env.js';
 import { type GitRepoState, getGitState, getIsGit } from '../utils/git.js';
-import { getAuthHeaders, getUserAgent } from '../utils/http.js';
 import { getInMemoryErrors, logError } from '../utils/log.js';
-import { isEssentialTrafficOnly } from '../utils/privacyLevel.js';
 import { extractTeammateTranscriptsFromTasks, getTranscriptPath, loadAllSubagentTranscriptsFromDisk, MAX_TRANSCRIPT_READ_BYTES } from '../utils/sessionStorage.js';
 import { jsonStringify } from '../utils/slowOperations.js';
 import { asSystemPrompt } from '../utils/systemPromptType.js';
@@ -32,7 +29,7 @@ import TextInput from './TextInput.js';
 
 // This value was determined experimentally by testing the URL length limit
 const GITHUB_URL_LIMIT = 7250;
-const GITHUB_ISSUES_REPO_URL = "external" === 'ant' ? 'https://github.com/anthropics/claude-cli-internal/issues' : 'https://github.com/anthropics/claude-code/issues';
+const GITHUB_ISSUES_REPO_URL = PRODUCT_ISSUES_URL;
 type Props = {
   abortSignal: AbortSignal;
   messages: Message[];
@@ -231,7 +228,6 @@ export function Feedback({
           feedback_id: result.feedbackId as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
           last_assistant_message_id: lastAssistantMessageId as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS
         });
-        // 1P-only: freeform text approved for BQ. Join on feedback_id.
         logEventTo1P('tengu_bug_report_description', {
           feedback_id: result.feedbackId as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
           description: redactSensitiveInfo(description) as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS
@@ -239,11 +235,7 @@ export function Feedback({
       }
       setStep('done');
     } else {
-      if (result.isZdrOrg) {
-        setError('Feedback collection is not available for organizations with custom data retention policies.');
-      } else {
-        setError('Could not submit feedback. Please try again later.');
-      }
+      setError('Could not prepare the issue draft. Please try again later.');
       // Stay on userInput step so user can retry with their content preserved
       setStep('userInput');
     }
@@ -334,7 +326,7 @@ export function Feedback({
         </Box>}
 
       {step === 'consent' && <Box flexDirection="column">
-          <Text>This report will include:</Text>
+          <Text>This issue draft will include:</Text>
           <Box marginLeft={2} flexDirection="column">
             <Text>
               - Your feedback / bug description:{' '}
@@ -360,24 +352,24 @@ export function Feedback({
           </Box>
           <Box marginTop={1}>
             <Text wrap="wrap" dimColor>
-              We will use your feedback to debug related issues or to improve{' '}
-              Claude Code&apos;s functionality (eg. to reduce the risk of bugs
-              occurring in the future).
+              Better-Clawd no longer uploads bug reports to an upstream service.
+              Press Enter to prepare a GitHub issue draft with the details shown
+              above.
             </Text>
           </Box>
           <Box marginTop={1}>
             <Text>
-              Press <Text bold>Enter</Text> to confirm and submit.
+              Press <Text bold>Enter</Text> to continue.
             </Text>
           </Box>
         </Box>}
 
       {step === 'submitting' && <Box flexDirection="row" gap={1}>
-          <Text>Submitting report…</Text>
+          <Text>Preparing issue draft…</Text>
         </Box>}
 
       {step === 'done' && <Box flexDirection="column">
-          {error ? <Text color="error">{error}</Text> : <Text color="success">Thank you for your report!</Text>}
+          {error ? <Text color="error">{error}</Text> : <Text color="success">Issue draft ready.</Text>}
           {feedbackId && <Text dimColor>Feedback ID: {feedbackId}</Text>}
           <Box marginTop={1}>
             <Text>Press </Text>
@@ -396,7 +388,7 @@ export function createGitHubIssueUrl(feedbackId: string, title: string, descript
 }>): string {
   const sanitizedTitle = redactSensitiveInfo(title);
   const sanitizedDescription = redactSensitiveInfo(description);
-  const bodyPrefix = `**Bug Description**\n${sanitizedDescription}\n\n` + `**Environment Info**\n` + `- Platform: ${env.platform}\n` + `- Terminal: ${env.terminal}\n` + `- Version: ${MACRO.VERSION || 'unknown'}\n` + `- Feedback ID: ${feedbackId}\n` + `\n**Errors**\n\`\`\`json\n`;
+  const bodyPrefix = `**Bug Description**\n${sanitizedDescription}\n\n` + `**Environment Info**\n` + `- Product: ${PRODUCT_NAME}\n` + `- Platform: ${env.platform}\n` + `- Terminal: ${env.terminal}\n` + `- Version: ${MACRO.VERSION || 'unknown'}\n` + `- Feedback ID: ${feedbackId}\n` + `\n**Errors**\n\`\`\`json\n`;
   const errorSuffix = `\n\`\`\`\n`;
   const errorsJson = jsonStringify(errors);
   const baseUrl = `${GITHUB_ISSUES_REPO_URL}/new?title=${encodeURIComponent(sanitizedTitle)}&labels=user-reported,bug&body=`;
@@ -446,8 +438,8 @@ export function createGitHubIssueUrl(feedbackId: string, title: string, descript
 }
 async function generateTitle(description: string, abortSignal: AbortSignal): Promise<string> {
   try {
-    const response = await queryHaiku({
-      systemPrompt: asSystemPrompt(['Generate a concise, technical issue title (max 80 chars) for a public GitHub issue based on this bug report for Claude Code.', 'Claude Code is an agentic coding CLI based on the Anthropic API.', 'The title should:', '- Include the type of issue [Bug] or [Feature Request] as the first thing in the title', '- Be concise, specific and descriptive of the actual problem', '- Use technical terminology appropriate for a software issue', '- For error messages, extract the key error (e.g., "Missing Tool Result Block" rather than the full message)', '- Be direct and clear for developers to understand the problem', '- If you cannot determine a clear issue, use "Bug Report: [brief description]"', '- Any LLM API errors are from the Anthropic API, not from any other model provider', 'Your response will be directly used as the title of the Github issue, and as such should not contain any other commentary or explaination', 'Examples of good titles include: "[Bug] Auto-Compact triggers to soon", "[Bug] Anthropic API Error: Missing Tool Result Block", "[Bug] Error: Invalid Model Name for Opus"']),
+  const response = await queryHaiku({
+      systemPrompt: asSystemPrompt([`Generate a concise, technical issue title (max 80 chars) for a public GitHub issue based on this bug report for ${PRODUCT_NAME}.`, `${PRODUCT_NAME} is an agentic coding CLI with multiple model providers.`, 'The title should:', '- Include the type of issue [Bug] or [Feature Request] as the first thing in the title', '- Be concise, specific and descriptive of the actual problem', '- Use technical terminology appropriate for a software issue', '- For error messages, extract the key error (e.g., "Missing Tool Result Block" rather than the full message)', '- Be direct and clear for developers to understand the problem', '- If you cannot determine a clear issue, use "Bug Report: [brief description]"', 'Your response will be directly used as the title of the GitHub issue, and should not contain any extra commentary', 'Examples of good titles include: "[Bug] Auto-compact triggers too soon", "[Bug] Missing tool result block after retry", "[Bug] Invalid model name for GPT-5.4"']),
       userPrompt: description,
       signal: abortSignal,
       options: {
@@ -520,69 +512,14 @@ async function submitFeedback(data: FeedbackData, signal?: AbortSignal): Promise
   feedbackId?: string;
   isZdrOrg?: boolean;
 }> {
-  if (isEssentialTrafficOnly()) {
-    return {
-      success: false
-    };
-  }
   try {
-    // Ensure OAuth token is fresh before getting auth headers
-    // This prevents 401 errors from stale cached tokens
-    await checkAndRefreshOAuthTokenIfNeeded();
-    const authResult = getAuthHeaders();
-    if (authResult.error) {
-      return {
-        success: false
-      };
-    }
-    const headers: Record<string, string> = {
-      'Content-Type': 'application/json',
-      'User-Agent': getUserAgent(),
-      ...authResult.headers
-    };
-    const response = await axios.post('https://api.anthropic.com/api/claude_cli_feedback', {
-      content: jsonStringify(data)
-    }, {
-      headers,
-      timeout: 30000,
-      // 30 second timeout to prevent hanging
-      signal
-    });
-    if (response.status === 200) {
-      const result = response.data;
-      if (result?.feedback_id) {
-        return {
-          success: true,
-          feedbackId: result.feedback_id
-        };
-      }
-      sanitizeAndLogError(new Error('Failed to submit feedback: request did not return feedback_id'));
-      return {
-        success: false
-      };
-    }
-    sanitizeAndLogError(new Error('Failed to submit feedback:' + response.status));
+    void signal;
+    void data;
     return {
-      success: false
+      success: true,
+      feedbackId: `better-clawd-${Date.now().toString(36)}`
     };
   } catch (err) {
-    // Handle cancellation/abort - don't log as error
-    if (axios.isCancel(err)) {
-      return {
-        success: false
-      };
-    }
-    if (axios.isAxiosError(err) && err.response?.status === 403) {
-      const errorData = err.response.data;
-      if (errorData?.error?.type === 'permission_error' && errorData?.error?.message?.includes('Custom data retention settings')) {
-        sanitizeAndLogError(new Error('Cannot submit feedback because custom data retention settings are enabled'));
-        return {
-          success: false,
-          isZdrOrg: true
-        };
-      }
-    }
-    // Use our safe error logging function to avoid leaking API keys
     sanitizeAndLogError(err);
     return {
       success: false

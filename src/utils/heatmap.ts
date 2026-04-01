@@ -154,10 +154,10 @@ export function generateHeatmap(
   lines.push(
     '    Less ' +
       [
-        claudeOrange('░'),
-        claudeOrange('▒'),
-        claudeOrange('▓'),
-        claudeOrange('█'),
+        clawdBlue('░'),
+        clawdBlue('▒'),
+        clawdBlue('▓'),
+        clawdBlue('█'),
       ].join(' ') +
       ' More',
   )
@@ -177,21 +177,21 @@ function getIntensity(
   return 1
 }
 
-// Claude orange color (hex #da7756)
-const claudeOrange = chalk.hex('#da7756')
+// Better-Clawd blue (hex #3b82f6)
+const clawdBlue = chalk.hex('#3b82f6')
 
 function getHeatmapChar(intensity: number): string {
   switch (intensity) {
     case 0:
       return chalk.gray('·')
     case 1:
-      return claudeOrange('░')
+      return clawdBlue('░')
     case 2:
-      return claudeOrange('▒')
+      return clawdBlue('▒')
     case 3:
-      return claudeOrange('▓')
+      return clawdBlue('▓')
     case 4:
-      return claudeOrange('█')
+      return clawdBlue('█')
     default:
       return chalk.gray('·')
   }

@@ -43,6 +43,8 @@ export type ModelOption = {
 }
 
 export function getDefaultOptionForUser(fastMode = false): ModelOption {
+  const provider = getAPIProvider()
+  const isOpenAI = provider === 'openai'
   if (process.env.USER_TYPE === 'ant') {
     const currentModel = renderDefaultModelSetting(
       getDefaultMainLoopModelSetting(),
@@ -65,11 +67,13 @@ export function getDefaultOptionForUser(fastMode = false): ModelOption {
   }
 
   // PAYG
-  const is3P = getAPIProvider() !== 'firstParty'
+  const is3P = provider !== 'firstParty'
   return {
     value: null,
     label: 'Default (recommended)',
-    description: `Use the default model (currently ${renderDefaultModelSetting(getDefaultMainLoopModelSetting())})${is3P ? '' : ` · ${formatModelPricing(COST_TIER_3_15)}`}`,
+    description: isOpenAI
+      ? `Use the default OpenAI model (currently ${renderDefaultModelSetting(getDefaultMainLoopModelSetting())})`
+      : `Use the default model (currently ${renderDefaultModelSetting(getDefaultMainLoopModelSetting())})${is3P ? '' : ` · ${formatModelPricing(COST_TIER_3_15)}`}`,
   }
 }
 
@@ -94,7 +98,17 @@ function getCustomSonnetOption(): ModelOption | undefined {
 // @[MODEL LAUNCH]: Update or add model option functions (getSonnetXXOption, getOpusXXOption, etc.)
 // with the new model's label and description. These appear in the /model picker.
 function getSonnet46Option(): ModelOption {
-  const is3P = getAPIProvider() !== 'firstParty'
+  const provider = getAPIProvider()
+  const is3P = provider !== 'firstParty'
+  if (provider === 'openai') {
+    return {
+      value: getModelStrings().sonnet46,
+      label: 'GPT-5.4',
+      description: 'GPT-5.4 · Recommended for most coding tasks',
+      descriptionForModel:
+        'GPT-5.4 - recommended for most coding and agentic tasks on OpenAI',
+    }
+  }
   return {
     value: is3P ? getModelStrings().sonnet46 : 'sonnet',
     label: 'Sonnet',
@@ -131,7 +145,17 @@ function getOpus41Option(): ModelOption {
 }
 
 function getOpus46Option(fastMode = false): ModelOption {
-  const is3P = getAPIProvider() !== 'firstParty'
+  const provider = getAPIProvider()
+  const is3P = provider !== 'firstParty'
+  if (provider === 'openai') {
+    return {
+      value: getModelStrings().opus46,
+      label: 'GPT-5.4',
+      description: 'GPT-5.4 · Most capable OpenAI coding model',
+      descriptionForModel:
+        'GPT-5.4 - most capable OpenAI model for complex coding work',
+    }
+  }
   return {
     value: is3P ? getModelStrings().opus46 : 'opus',
     label: 'Opus',
@@ -141,7 +165,17 @@ function getOpus46Option(fastMode = false): ModelOption {
 }
 
 export function getSonnet46_1MOption(): ModelOption {
-  const is3P = getAPIProvider() !== 'firstParty'
+  const provider = getAPIProvider()
+  const is3P = provider !== 'firstParty'
+  if (provider === 'openai') {
+    return {
+      value: getModelStrings().sonnet46,
+      label: 'GPT-5.4',
+      description: 'GPT-5.4 for long-running OpenAI sessions',
+      descriptionForModel:
+        'GPT-5.4 for long-running OpenAI sessions and large codebases',
+    }
+  }
   return {
     value: is3P ? getModelStrings().sonnet46 + '[1m]' : 'sonnet[1m]',
     label: 'Sonnet (1M context)',
@@ -152,7 +186,17 @@ export function getSonnet46_1MOption(): ModelOption {
 }
 
 export function getOpus46_1MOption(fastMode = false): ModelOption {
-  const is3P = getAPIProvider() !== 'firstParty'
+  const provider = getAPIProvider()
+  const is3P = provider !== 'firstParty'
+  if (provider === 'openai') {
+    return {
+      value: getModelStrings().opus46,
+      label: 'GPT-5.4',
+      description: 'GPT-5.4 for long-running OpenAI sessions',
+      descriptionForModel:
+        'GPT-5.4 for long-running OpenAI sessions and large codebases',
+    }
+  }
   return {
     value: is3P ? getModelStrings().opus46 + '[1m]' : 'opus[1m]',
     label: 'Opus (1M context)',
@@ -179,7 +223,17 @@ function getCustomHaikuOption(): ModelOption | undefined {
 }
 
 function getHaiku45Option(): ModelOption {
-  const is3P = getAPIProvider() !== 'firstParty'
+  const provider = getAPIProvider()
+  const is3P = provider !== 'firstParty'
+  if (provider === 'openai') {
+    return {
+      value: getModelStrings().haiku45,
+      label: 'GPT-5.4 Mini',
+      description: 'GPT-5.4 Mini · Fastest OpenAI option for quick answers',
+      descriptionForModel:
+        'GPT-5.4 Mini - fastest OpenAI option for quick answers and lightweight tasks',
+    }
+  }
   return {
     value: 'haiku',
     label: 'Haiku',
@@ -190,7 +244,17 @@ function getHaiku45Option(): ModelOption {
 }
 
 function getHaiku35Option(): ModelOption {
-  const is3P = getAPIProvider() !== 'firstParty'
+  const provider = getAPIProvider()
+  const is3P = provider !== 'firstParty'
+  if (provider === 'openai') {
+    return {
+      value: getModelStrings().haiku35,
+      label: 'GPT-5.4 Mini',
+      description: 'GPT-5.4 Mini for simple tasks',
+      descriptionForModel:
+        'GPT-5.4 Mini - lower latency OpenAI model for simple tasks',
+    }
+  }
   return {
     value: 'haiku',
     label: 'Haiku',

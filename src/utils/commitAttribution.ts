@@ -1,6 +1,7 @@
 import { createHash, randomUUID, type UUID } from 'crypto'
 import { stat } from 'fs/promises'
 import { isAbsolute, join, relative, sep } from 'path'
+import { PRODUCT_NAME } from '../constants/product.js'
 import { getOriginalCwd, getSessionId } from '../bootstrap/state.js'
 import type {
   AttributionSnapshotMessage,
@@ -164,11 +165,11 @@ export function sanitizeModelName(shortName: string): string {
   if (shortName.includes('haiku-4-5')) return 'claude-haiku-4-5'
   if (shortName.includes('haiku-3-5')) return 'claude-haiku-3-5'
   // Unknown models get a generic name
-  return 'claude'
+  return PRODUCT_NAME.toLowerCase()
 }
 
 /**
- * Attribution state for tracking Claude's contributions to files.
+ * Attribution state for tracking assistant contributions to files.
  */
 export type AttributionState = {
   // File states keyed by relative path (from cwd)
@@ -192,7 +193,7 @@ export type AttributionState = {
 }
 
 /**
- * Summary of Claude's contribution for a commit.
+ * Summary of assistant contribution for a commit.
  */
 export type AttributionSummary = {
   claudePercent: number

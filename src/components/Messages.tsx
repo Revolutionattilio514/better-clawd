@@ -282,10 +282,11 @@ const MAX_MESSAGES_TO_SHOW_IN_TRANSCRIPT_MODE = 30;
 // of fibers, and per-frame write costs that push the process into a GC
 // death spiral (observed: 59 GB RSS, 14k mmap/munmap/sec). Content dropped
 // from this slice has already been printed to terminal scrollback — users
-// can still scroll up natively. VirtualMessageList (the default ant path)
-// bypasses this cap entirely. Headless one-shot renders (e.g. /export)
-// pass disableRenderCap to opt out — they have no scrollback and the
-// memory concern doesn't apply to renderToString.
+// can still scroll up natively. Better-Clawd's default external path is the
+// main-screen renderer (no VirtualMessageList), so keep the live window
+// smaller to reduce typing-time diff/write work in long sessions. Headless
+// one-shot renders (e.g. /export) pass disableRenderCap to opt out — they
+// have no scrollback and the memory concern doesn't apply to renderToString.
 //
 // The slice boundary is tracked as a UUID anchor, not a count-derived
 // index. Count-based slicing (slice(-200)) drops one message from the
@@ -302,9 +303,9 @@ const MAX_MESSAGES_TO_SHOW_IN_TRANSCRIPT_MODE = 30;
 // as tool results stream in, changing which summary is first. When the
 // uuid vanishes, falling back to the stored index (clamped) keeps the
 // slice roughly where it was instead of resetting to 0 — which would
-// jump from ~200 rendered messages to the full history, orphaning
+// jump from ~120 rendered messages to the full history, orphaning
 // in-progress badge snapshots in scrollback.
-const MAX_MESSAGES_WITHOUT_VIRTUALIZATION = 200;
+const MAX_MESSAGES_WITHOUT_VIRTUALIZATION = 120;
 const MESSAGE_CAP_STEP = 50;
 export type SliceAnchor = {
   uuid: string;
@@ -500,7 +501,7 @@ const MessagesImpl = ({
     // CC-724: drop attachment messages that AttachmentMessage renders as
     // null (hook_success, hook_additional_context, hook_cancelled, etc.)
     // BEFORE counting/slicing so they don't inflate the "N messages"
-    // count in ctrl-o or consume slots in the 200-message render cap.
+    // count in ctrl-o or consume slots in the non-virtualized render cap.
     .filter(msg_3 => !isNullRenderingAttachment(msg_3)).filter(_ => shouldShowUserMessage(_, isTranscriptMode)), syntheticStreamingToolUseMessages);
     // Three-tier filtering. Transcript mode (ctrl+o screen) is truly unfiltered.
     // Brief-only: SendUserMessage + user input only. Default: drop redundant
@@ -730,13 +731,20 @@ function expandKey(msg: RenderableMessage): string {
 // Default React.memo does shallow comparison which fails when:
 // 1. onOpenRateLimitOptions callback is recreated (doesn't affect render output)
 // 2. streamingToolUses array is recreated on every delta, but only contentBlock matters for rendering
-// 3. streamingThinking changes on every delta - we DO want to re-render for this
+// 3. commands/tool queues get rebuilt with the same semantic contents
+// 4. streamingThinking changes on every delta - we DO want to re-render for this
 function setsEqual<T>(a: Set<T>, b: Set<T>): boolean {
   if (a.size !== b.size) return false;
   for (const item of a) {
     if (!b.has(item)) return false;
   }
   return true;
+}
+function commandArraysEqual(a: Command[], b: Command[]): boolean {
+  return a.length === b.length && a.every((command, i) => command.name === b[i]?.name);
+}
+function toolUseConfirmQueuesEqual(a: ToolUseConfirm[], b: ToolUseConfirm[]): boolean {
+  return a.length === b.length && a.every((item, i) => item.toolUseID === b[i]?.toolUseID);
 }
 export const Messages = React.memo(MessagesImpl, (prev, next) => {
   const keys = Object.keys(prev) as (keyof typeof prev)[];
@@ -766,6 +774,16 @@ export const Messages = React.memo(MessagesImpl, (prev, next) => {
         const p = prev.tools;
         const n = next.tools;
         if (p.length === n.length && p.every((tool, i) => tool.name === n[i]?.name)) {
+          continue;
+        }
+      }
+      if (key === 'commands') {
+        if (commandArraysEqual(prev.commands, next.commands)) {
+          continue;
+        }
+      }
+      if (key === 'toolUseConfirmQueue') {
+        if (toolUseConfirmQueuesEqual(prev.toolUseConfirmQueue, next.toolUseConfirmQueue)) {
           continue;
         }
       }

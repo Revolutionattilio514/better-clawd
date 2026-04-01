@@ -8,8 +8,9 @@
 import { homedir, userInfo } from 'os'
 import { join } from 'path'
 
-/** macOS preference domain for Claude Code MDM profiles. */
-export const MACOS_PREFERENCE_DOMAIN = 'com.anthropic.claudecode'
+/** macOS preference domains for Better-Clawd MDM profiles (new first, legacy fallback second). */
+export const MACOS_PREFERENCE_DOMAIN = 'com.betterclawd.betterclawd'
+export const LEGACY_MACOS_PREFERENCE_DOMAIN = 'com.anthropic.claudecode'
 
 /**
  * Windows registry key paths for Claude Code MDM policies.
@@ -21,8 +22,12 @@ export const MACOS_PREFERENCE_DOMAIN = 'com.anthropic.claudecode'
  * See: https://learn.microsoft.com/en-us/windows/win32/winprog64/shared-registry-keys
  */
 export const WINDOWS_REGISTRY_KEY_PATH_HKLM =
-  'HKLM\\SOFTWARE\\Policies\\ClaudeCode'
+  'HKLM\\SOFTWARE\\Policies\\BetterClawd'
 export const WINDOWS_REGISTRY_KEY_PATH_HKCU =
+  'HKCU\\SOFTWARE\\Policies\\BetterClawd'
+export const LEGACY_WINDOWS_REGISTRY_KEY_PATH_HKLM =
+  'HKLM\\SOFTWARE\\Policies\\ClaudeCode'
+export const LEGACY_WINDOWS_REGISTRY_KEY_PATH_HKCU =
   'HKCU\\SOFTWARE\\Policies\\ClaudeCode'
 
 /** Windows registry value name containing the JSON settings blob. */
@@ -51,31 +56,52 @@ export function getMacOSPlistPaths(): Array<{ path: string; label: string }> {
   }
 
   const paths: Array<{ path: string; label: string }> = []
+  const domains = [MACOS_PREFERENCE_DOMAIN, LEGACY_MACOS_PREFERENCE_DOMAIN]
 
   if (username) {
-    paths.push({
-      path: `/Library/Managed Preferences/${username}/${MACOS_PREFERENCE_DOMAIN}.plist`,
-      label: 'per-user managed preferences',
-    })
+    for (const domain of domains) {
+      paths.push({
+        path: `/Library/Managed Preferences/${username}/${domain}.plist`,
+        label:
+          domain === MACOS_PREFERENCE_DOMAIN
+            ? 'per-user managed preferences'
+            : 'per-user managed preferences (legacy)',
+      })
+    }
   }
 
-  paths.push({
-    path: `/Library/Managed Preferences/${MACOS_PREFERENCE_DOMAIN}.plist`,
-    label: 'device-level managed preferences',
-  })
+  for (const domain of domains) {
+    paths.push({
+      path: `/Library/Managed Preferences/${domain}.plist`,
+      label:
+        domain === MACOS_PREFERENCE_DOMAIN
+          ? 'device-level managed preferences'
+          : 'device-level managed preferences (legacy)',
+    })
+  }
 
   // Allow user-writable preferences for local MDM testing in ant builds only.
   if (process.env.USER_TYPE === 'ant') {
-    paths.push({
-      path: join(
-        homedir(),
-        'Library',
-        'Preferences',
-        `${MACOS_PREFERENCE_DOMAIN}.plist`,
-      ),
-      label: 'user preferences (ant-only)',
-    })
+    for (const domain of domains) {
+      paths.push({
+        path: join(homedir(), 'Library', 'Preferences', `${domain}.plist`),
+        label:
+          domain === MACOS_PREFERENCE_DOMAIN
+            ? 'user preferences (ant-only)'
+            : 'user preferences (legacy, ant-only)',
+      })
+    }
   }
 
   return paths
+}
+
+export function getWindowsRegistryKeyPaths(): {
+  hklm: string[]
+  hkcu: string[]
+} {
+  return {
+    hklm: [WINDOWS_REGISTRY_KEY_PATH_HKLM, LEGACY_WINDOWS_REGISTRY_KEY_PATH_HKLM],
+    hkcu: [WINDOWS_REGISTRY_KEY_PATH_HKCU, LEGACY_WINDOWS_REGISTRY_KEY_PATH_HKCU],
+  }
 }

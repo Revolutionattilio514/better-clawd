@@ -139,8 +139,7 @@ async function _bundleWithFallback(
 
   return {
     ok: false,
-    error:
-      'Repo is too large to bundle. Please setup GitHub on https://claude.ai/code',
+    error: 'Repo is too large to bundle. Please configure a Git remote instead.',
     failReason: 'too_large',
   }
 }

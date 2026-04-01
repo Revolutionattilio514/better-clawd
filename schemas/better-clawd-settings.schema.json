@@ -1,0 +1,8 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://raw.githubusercontent.com/x1xhlol/better-clawd/main/schemas/better-clawd-settings.schema.json",
+  "title": "Better-Clawd Settings",
+  "type": "object",
+  "description": "Placeholder schema for Better-Clawd settings. Runtime validation is enforced by the application.",
+  "additionalProperties": true
+}

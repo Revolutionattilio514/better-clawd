@@ -13,11 +13,10 @@ import { execFile } from 'child_process'
 import { existsSync } from 'fs'
 import {
   getMacOSPlistPaths,
+  getWindowsRegistryKeyPaths,
   MDM_SUBPROCESS_TIMEOUT_MS,
   PLUTIL_ARGS_PREFIX,
   PLUTIL_PATH,
-  WINDOWS_REGISTRY_KEY_PATH_HKCU,
-  WINDOWS_REGISTRY_KEY_PATH_HKLM,
   WINDOWS_REGISTRY_VALUE_NAME,
 } from './constants.js'
 
@@ -88,24 +87,35 @@ export function fireRawRead(): Promise<RawReadResult> {
     }
 
     if (process.platform === 'win32') {
-      const [hklm, hkcu] = await Promise.all([
-        execFilePromise('reg', [
-          'query',
-          WINDOWS_REGISTRY_KEY_PATH_HKLM,
-          '/v',
-          WINDOWS_REGISTRY_VALUE_NAME,
-        ]),
-        execFilePromise('reg', [
-          'query',
-          WINDOWS_REGISTRY_KEY_PATH_HKCU,
-          '/v',
-          WINDOWS_REGISTRY_VALUE_NAME,
-        ]),
+      const registryKeys = getWindowsRegistryKeyPaths()
+      const [hklmResults, hkcuResults] = await Promise.all([
+        Promise.all(
+          registryKeys.hklm.map(keyPath =>
+            execFilePromise('reg', [
+              'query',
+              keyPath,
+              '/v',
+              WINDOWS_REGISTRY_VALUE_NAME,
+            ]),
+          ),
+        ),
+        Promise.all(
+          registryKeys.hkcu.map(keyPath =>
+            execFilePromise('reg', [
+              'query',
+              keyPath,
+              '/v',
+              WINDOWS_REGISTRY_VALUE_NAME,
+            ]),
+          ),
+        ),
       ])
+      const hklm = hklmResults.find(result => result.code === 0)
+      const hkcu = hkcuResults.find(result => result.code === 0)
       return {
         plistStdouts: null,
-        hklmStdout: hklm.code === 0 ? hklm.stdout : null,
-        hkcuStdout: hkcu.code === 0 ? hkcu.stdout : null,
+        hklmStdout: hklm?.stdout ?? null,
+        hkcuStdout: hkcu?.stdout ?? null,
       }
     }
 

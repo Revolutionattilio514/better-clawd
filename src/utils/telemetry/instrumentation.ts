@@ -322,7 +322,10 @@ async function getOtlpTraceExporters() {
 }
 
 export function isTelemetryEnabled() {
-  return isEnvTruthy(process.env.CLAUDE_CODE_ENABLE_TELEMETRY)
+  return isEnvTruthy(
+    process.env.BETTER_CLAWD_ENABLE_TELEMETRY ??
+      process.env.CLAUDE_CODE_ENABLE_TELEMETRY,
+  )
 }
 
 function getBigQueryExportingReader() {

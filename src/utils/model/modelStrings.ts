@@ -23,6 +23,21 @@ export type ModelStrings = Record<ModelKey, string>
 const MODEL_KEYS = Object.keys(ALL_MODEL_CONFIGS) as ModelKey[]
 
 function getBuiltinModelStrings(provider: APIProvider): ModelStrings {
+  if (provider === 'openai') {
+    const out = getBuiltinModelStrings('firstParty') as Record<string, string>
+    out.haiku35 = process.env.OPENAI_HAIKU_MODEL || 'gpt-5.4-mini'
+    out.haiku45 = process.env.OPENAI_HAIKU_MODEL || 'gpt-5.4-mini'
+    out.sonnet37 = process.env.OPENAI_SONNET_MODEL || 'gpt-5.4'
+    out.sonnet40 = process.env.OPENAI_SONNET_MODEL || 'gpt-5.4'
+    out.sonnet45 = process.env.OPENAI_SONNET_MODEL || 'gpt-5.4'
+    out.sonnet46 = process.env.OPENAI_SONNET_MODEL || 'gpt-5.4'
+    out.opus40 = process.env.OPENAI_OPUS_MODEL || 'gpt-5.4'
+    out.opus41 = process.env.OPENAI_OPUS_MODEL || 'gpt-5.4'
+    out.opus45 = process.env.OPENAI_OPUS_MODEL || 'gpt-5.4'
+    out.opus46 = process.env.OPENAI_OPUS_MODEL || 'gpt-5.4'
+    return out as ModelStrings
+  }
+
   const out = {} as ModelStrings
   for (const key of MODEL_KEYS) {
     out[key] = ALL_MODEL_CONFIGS[key][provider]

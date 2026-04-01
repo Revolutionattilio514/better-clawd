@@ -34,6 +34,9 @@ export type ModelName = string
 export type ModelSetting = ModelName | ModelAlias | null
 
 export function getSmallFastModel(): ModelName {
+  if (getAPIProvider() === 'openai') {
+    return process.env.OPENAI_SMALL_FAST_MODEL || getDefaultHaikuModel()
+  }
   return process.env.ANTHROPIC_SMALL_FAST_MODEL || getDefaultHaikuModel()
 }
 

@@ -464,6 +464,8 @@ function PromptInput({
   // immediately; the useEffect below clears the raw state so it doesn't
   // resurrect when the same pill reappears (new task starts → focus stolen).
   const rawFooterSelection = useAppState(s => s.footerSelection);
+  const footerSelectionRef = useRef<FooterItem | null>(null);
+  footerSelectionRef.current = rawFooterSelection;
   const footerItemSelected = rawFooterSelection && footerItems.includes(rawFooterSelection) ? rawFooterSelection : null;
   useEffect(() => {
     if (rawFooterSelection && !footerItemSelected) {
@@ -473,6 +475,15 @@ function PromptInput({
       });
     }
   }, [rawFooterSelection, footerItemSelected, setAppState]);
+  const clearFooterSelectionIfNeeded = useCallback(() => {
+    if (footerSelectionRef.current === null) {
+      return;
+    }
+    setAppState(prev => prev.footerSelection === null ? prev : {
+      ...prev,
+      footerSelection: null
+    });
+  }, [setAppState]);
   const tasksSelected = footerItemSelected === 'tasks';
   const tmuxSelected = footerItemSelected === 'tmux';
   const bagelSelected = footerItemSelected === 'bagel';
@@ -892,13 +903,11 @@ function PromptInput({
       pushToBuffer(input, cursorOffset, pastedContents);
     }
 
-    // Deselect footer items when user types
-    setAppState(prev => prev.footerSelection === null ? prev : {
-      ...prev,
-      footerSelection: null
-    });
+    // Deselect footer items when user types, but skip the store write when
+    // nothing is selected so routine keystrokes stay inside the input subtree.
+    clearFooterSelectionIfNeeded();
     trackAndSetInput(processedValue);
-  }, [trackAndSetInput, onModeChange, input, cursorOffset, pushToBuffer, pastedContents, dismissStashHint, setAppState]);
+  }, [trackAndSetInput, onModeChange, input, cursorOffset, pushToBuffer, pastedContents, dismissStashHint, clearFooterSelectionIfNeeded]);
   const {
     resetHistory,
     onHistoryUp,

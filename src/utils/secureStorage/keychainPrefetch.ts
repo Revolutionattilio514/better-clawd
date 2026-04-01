@@ -26,6 +26,7 @@ import { isBareMode } from '../envUtils.js'
 import {
   CREDENTIALS_SERVICE_SUFFIX,
   getMacOsKeychainStorageServiceName,
+  getMacOsKeychainStorageServiceNames,
   getUsername,
   primeKeychainCacheFromPrefetch,
 } from './macOsKeychainHelpers.js'
@@ -72,20 +73,26 @@ export function startKeychainPrefetch(): void {
   // Fire both subprocesses immediately (non-blocking). They run in parallel
   // with each other AND with main.tsx imports. The await in Promise.all
   // happens later via ensureKeychainPrefetchCompleted().
-  const oauthSpawn = spawnSecurity(
-    getMacOsKeychainStorageServiceName(CREDENTIALS_SERVICE_SUFFIX),
-  )
-  const legacySpawn = spawnSecurity(getMacOsKeychainStorageServiceName())
+  const oauthSpawns = getMacOsKeychainStorageServiceNames(
+    CREDENTIALS_SERVICE_SUFFIX,
+  ).map(spawnSecurity)
+  const legacySpawns = getMacOsKeychainStorageServiceNames().map(spawnSecurity)
 
-  prefetchPromise = Promise.all([oauthSpawn, legacySpawn]).then(
-    ([oauth, legacy]) => {
+  prefetchPromise = Promise.all([
+    Promise.all(oauthSpawns),
+    Promise.all(legacySpawns),
+  ]).then(([oauthResults, legacyResults]) => {
+    const oauth = oauthResults.find(result => result.stdout) ?? oauthResults[0]
+    const legacy = legacyResults.find(result => result.stdout) ?? legacyResults[0]
+    if (!oauth || !legacy) {
+      return
+    }
       // Timed-out prefetch: don't prime. Sync read/spawn will retry with its
       // own (longer) timeout. Priming null here would shadow a key that the
       // sync path might successfully fetch.
       if (!oauth.timedOut) primeKeychainCacheFromPrefetch(oauth.stdout)
       if (!legacy.timedOut) legacyApiKeyPrefetch = { stdout: legacy.stdout }
-    },
-  )
+    })
 }
 
 /**

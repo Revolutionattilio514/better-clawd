@@ -18,7 +18,8 @@ import { Dialog } from './design-system/Dialog.js';
 import { KeyboardShortcutHint } from './design-system/KeyboardShortcutHint.js';
 import { LoadingState } from './design-system/LoadingState.js';
 const DIALOG_TITLE = 'Select Remote Environment';
-const SETUP_HINT = `Configure environments at: https://claude.ai/code`;
+const SETUP_HINT =
+  'Remote environments are not configured by Better-Clawd. Use your existing remote session provider setup.';
 type Props = {
   onDone: (message?: string) => void;
 };

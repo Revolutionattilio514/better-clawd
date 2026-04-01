@@ -3,6 +3,10 @@ import mergeWith from 'lodash-es/mergeWith.js'
 import { dirname, join, resolve } from 'path'
 import { z } from 'zod/v4'
 import {
+  LEGACY_PRODUCT_CONFIG_DIRNAME,
+  PRODUCT_CONFIG_DIRNAME,
+} from '../../constants/product.js'
+import {
   getFlagSettingsInline,
   getFlagSettingsPath,
   getOriginalCwd,
@@ -282,10 +286,15 @@ export function getSettingsFilePathForSource(
       )
     case 'projectSettings':
     case 'localSettings': {
-      return join(
-        getSettingsRootPathForSource(source),
-        getRelativeSettingsFilePathForSource(source),
-      )
+      const root = getSettingsRootPathForSource(source)
+      const candidates = getRelativeSettingsFilePathCandidatesForSource(source)
+      for (const relativePath of candidates) {
+        const absolutePath = join(root, relativePath)
+        if (getFsImplementation().existsSync(absolutePath)) {
+          return absolutePath
+        }
+      }
+      return join(root, candidates[0]!)
     }
     case 'policySettings':
       return getManagedSettingsFilePath()
@@ -298,11 +307,23 @@ export function getSettingsFilePathForSource(
 export function getRelativeSettingsFilePathForSource(
   source: 'projectSettings' | 'localSettings',
 ): string {
+  return getRelativeSettingsFilePathCandidatesForSource(source)[0]!
+}
+
+function getRelativeSettingsFilePathCandidatesForSource(
+  source: 'projectSettings' | 'localSettings',
+): string[] {
   switch (source) {
     case 'projectSettings':
-      return join('.claude', 'settings.json')
+      return [
+        join(PRODUCT_CONFIG_DIRNAME, 'settings.json'),
+        join(LEGACY_PRODUCT_CONFIG_DIRNAME, 'settings.json'),
+      ]
     case 'localSettings':
-      return join('.claude', 'settings.local.json')
+      return [
+        join(PRODUCT_CONFIG_DIRNAME, 'settings.local.json'),
+        join(LEGACY_PRODUCT_CONFIG_DIRNAME, 'settings.local.json'),
+      ]
   }
 }
 

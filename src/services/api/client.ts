@@ -6,7 +6,10 @@ import {
   getAnthropicApiKey,
   getApiKeyFromApiKeyHelper,
   getClaudeAIOAuthTokens,
+  getOpenAIApiKey,
+  getOpenRouterApiKey,
   isClaudeAISubscriber,
+  refreshOpenAIAuthTokenIfNeeded,
   refreshAndGetAwsCredentials,
   refreshGcpCredentialsIfNeeded,
 } from 'src/utils/auth.js'
@@ -14,9 +17,12 @@ import { getUserAgent } from 'src/utils/http.js'
 import { getSmallFastModel } from 'src/utils/model/model.js'
 import {
   getAPIProvider,
+  getOpenAIBaseUrl,
+  getOpenRouterBaseUrl,
   isFirstPartyAnthropicBaseUrl,
 } from 'src/utils/model/providers.js'
 import { getProxyFetchOptions } from 'src/utils/proxy.js'
+import { OpenAIResponsesCompatClient } from './openaiCompat.js'
 import {
   getIsNonInteractiveSession,
   getSessionId,
@@ -98,6 +104,7 @@ export async function getAnthropicClient({
   fetchOverride?: ClientOptions['fetch']
   source?: string
 }): Promise<Anthropic> {
+  const provider = getAPIProvider()
   const containerId = process.env.CLAUDE_CODE_CONTAINER_ID
   const remoteSessionId = process.env.CLAUDE_CODE_REMOTE_SESSION_ID
   const clientApp = process.env.CLAUDE_AGENT_SDK_CLIENT_APP
@@ -150,7 +157,7 @@ export async function getAnthropicClient({
       fetch: resolvedFetch,
     }),
   }
-  if (isEnvTruthy(process.env.CLAUDE_CODE_USE_BEDROCK)) {
+  if (provider === 'bedrock') {
     const { AnthropicBedrock } = await import('@anthropic-ai/bedrock-sdk')
     // Use region override for small fast model if specified
     const awsRegion =
@@ -188,7 +195,7 @@ export async function getAnthropicClient({
     // we have always been lying about the return type - this doesn't support batching or models
     return new AnthropicBedrock(bedrockArgs) as unknown as Anthropic
   }
-  if (isEnvTruthy(process.env.CLAUDE_CODE_USE_FOUNDRY)) {
+  if (provider === 'foundry') {
     const { AnthropicFoundry } = await import('@anthropic-ai/foundry-sdk')
     // Determine Azure AD token provider based on configuration
     // SDK reads ANTHROPIC_FOUNDRY_API_KEY by default
@@ -218,7 +225,7 @@ export async function getAnthropicClient({
     // we have always been lying about the return type - this doesn't support batching or models
     return new AnthropicFoundry(foundryArgs) as unknown as Anthropic
   }
-  if (isEnvTruthy(process.env.CLAUDE_CODE_USE_VERTEX)) {
+  if (provider === 'vertex') {
     // Refresh GCP credentials if gcpAuthRefresh is configured and credentials are expired
     // This is similar to how we handle AWS credential refresh for Bedrock
     if (!isEnvTruthy(process.env.CLAUDE_CODE_SKIP_VERTEX_AUTH)) {
@@ -297,7 +304,37 @@ export async function getAnthropicClient({
     return new AnthropicVertex(vertexArgs) as unknown as Anthropic
   }
 
-  // Determine authentication method based on available tokens
+  if (provider === 'openrouter') {
+    const clientConfig: ConstructorParameters<typeof Anthropic>[0] = {
+      apiKey: null,
+      authToken: apiKey || getOpenRouterApiKey(),
+      baseURL: getOpenRouterBaseUrl(),
+      ...ARGS,
+      ...(isDebugToStdErr() && { logger: createStderrLogger() }),
+    }
+
+    return new Anthropic(clientConfig)
+  }
+
+  if (provider === 'openai') {
+    await refreshOpenAIAuthTokenIfNeeded()
+    const openAIKey = apiKey || getOpenAIApiKey()
+    if (!openAIKey) {
+      throw new Error(
+        'OpenAI provider selected but no OpenAI API key or access token is configured.',
+      )
+    }
+
+    return new OpenAIResponsesCompatClient({
+      apiKey: openAIKey,
+      baseURL: getOpenAIBaseUrl(),
+      defaultHeaders,
+      fetchImpl: resolvedFetch,
+      timeoutMs: ARGS.timeout,
+    }) as unknown as Anthropic
+  }
+
+  // Determine authentication method based on available Anthropic tokens
   const clientConfig: ConstructorParameters<typeof Anthropic>[0] = {
     apiKey: isClaudeAISubscriber() ? null : apiKey || getAnthropicApiKey(),
     authToken: isClaudeAISubscriber()

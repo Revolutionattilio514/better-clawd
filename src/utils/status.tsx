@@ -242,6 +242,8 @@ export function buildAPIProviderProperties(): Property[] {
   const properties: Property[] = [];
   if (apiProvider !== 'firstParty') {
     const providerLabel = {
+      openrouter: 'OpenRouter',
+      openai: 'OpenAI',
       bedrock: 'AWS Bedrock',
       vertex: 'Google Vertex AI',
       foundry: 'Microsoft Foundry'
@@ -259,6 +261,19 @@ export function buildAPIProviderProperties(): Property[] {
         value: anthropicBaseUrl
       });
     }
+  } else if (apiProvider === 'openrouter') {
+    properties.push({
+      label: 'OpenRouter base URL',
+      value:
+        process.env.OPENROUTER_BASE_URL ||
+        process.env.ANTHROPIC_BASE_URL ||
+        'https://openrouter.ai/api/v1'
+    });
+  } else if (apiProvider === 'openai') {
+    properties.push({
+      label: 'OpenAI base URL',
+      value: process.env.OPENAI_BASE_URL || 'https://api.openai.com/v1'
+    });
   } else if (apiProvider === 'bedrock') {
     const bedrockBaseUrl = process.env.BEDROCK_BASE_URL;
     if (bedrockBaseUrl) {

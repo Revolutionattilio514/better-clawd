@@ -68,34 +68,7 @@ export type MaxVersionConfig = {
  * This approach keeps version comparison logic simple while maintaining traceability via the SHA.
  */
 export async function assertMinVersion(): Promise<void> {
-  if (process.env.NODE_ENV === 'test') {
-    return
-  }
-
-  try {
-    const versionConfig = await getDynamicConfig_BLOCKS_ON_INIT<{
-      minVersion: string
-    }>('tengu_version_config', { minVersion: '0.0.0' })
-
-    if (
-      versionConfig.minVersion &&
-      lt(MACRO.VERSION, versionConfig.minVersion)
-    ) {
-      // biome-ignore lint/suspicious/noConsole:: intentional console output
-      console.error(`
-It looks like your version of Claude Code (${MACRO.VERSION}) needs an update.
-A newer version (${versionConfig.minVersion} or higher) is required to continue.
-
-To update, please run:
-    claude update
-
-This will ensure you have access to the latest features and improvements.
-`)
-      gracefulShutdownSync(1)
-    }
-  } catch (error) {
-    logError(error as Error)
-  }
+  return
 }
 
 /**
@@ -106,11 +79,7 @@ This will ensure you have access to the latest features and improvements.
  * Returns undefined if no cap is configured.
  */
 export async function getMaxVersion(): Promise<string | undefined> {
-  const config = await getMaxVersionConfig()
-  if (process.env.USER_TYPE === 'ant') {
-    return config.ant || undefined
-  }
-  return config.external || undefined
+  return undefined
 }
 
 /**
@@ -118,11 +87,7 @@ export async function getMaxVersion(): Promise<string | undefined> {
  * Shown in the warning banner when the current version exceeds the max allowed version.
  */
 export async function getMaxVersionMessage(): Promise<string | undefined> {
-  const config = await getMaxVersionConfig()
-  if (process.env.USER_TYPE === 'ant') {
-    return config.ant_message || undefined
-  }
-  return config.external_message || undefined
+  return undefined
 }
 
 async function getMaxVersionConfig(): Promise<MaxVersionConfig> {
@@ -319,28 +284,8 @@ export async function checkGlobalInstallPermissions(): Promise<{
 export async function getLatestVersion(
   channel: ReleaseChannel,
 ): Promise<string | null> {
-  const npmTag = channel === 'stable' ? 'stable' : 'latest'
-
-  // Run from home directory to avoid reading project-level .npmrc
-  // which could be maliciously crafted to redirect to an attacker's registry
-  const result = await execFileNoThrowWithCwd(
-    'npm',
-    ['view', `${MACRO.PACKAGE_URL}@${npmTag}`, 'version', '--prefer-online'],
-    { abortSignal: AbortSignal.timeout(5000), cwd: homedir() },
-  )
-  if (result.code !== 0) {
-    logForDebugging(`npm view failed with code ${result.code}`)
-    if (result.stderr) {
-      logForDebugging(`npm stderr: ${result.stderr.trim()}`)
-    } else {
-      logForDebugging('npm stderr: (empty)')
-    }
-    if (result.stdout) {
-      logForDebugging(`npm stdout: ${result.stdout.trim()}`)
-    }
-    return null
-  }
-  return result.stdout.trim()
+  void channel
+  return MACRO.VERSION
 }
 
 export type NpmDistTags = {
@@ -384,16 +329,8 @@ export async function getNpmDistTags(): Promise<NpmDistTags> {
 export async function getLatestVersionFromGcs(
   channel: ReleaseChannel,
 ): Promise<string | null> {
-  try {
-    const response = await axios.get(`${GCS_BUCKET_URL}/${channel}`, {
-      timeout: 5000,
-      responseType: 'text',
-    })
-    return response.data.trim()
-  } catch (error) {
-    logForDebugging(`Failed to fetch ${channel} from GCS: ${error}`)
-    return null
-  }
+  void channel
+  return MACRO.VERSION
 }
 
 /**
@@ -456,80 +393,8 @@ export async function getVersionHistory(limit: number): Promise<string[]> {
 export async function installGlobalPackage(
   specificVersion?: string | null,
 ): Promise<InstallStatus> {
-  if (!(await acquireLock())) {
-    logError(
-      new AutoUpdaterError('Another process is currently installing an update'),
-    )
-    // Log the lock contention
-    logEvent('tengu_auto_updater_lock_contention', {
-      pid: process.pid,
-      currentVersion:
-        MACRO.VERSION as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
-    })
-    return 'in_progress'
-  }
-
-  try {
-    await removeClaudeAliasesFromShellConfigs()
-    // Check if we're using npm from Windows path in WSL
-    if (!env.isRunningWithBun() && env.isNpmFromWindowsPath()) {
-      logError(new Error('Windows NPM detected in WSL environment'))
-      logEvent('tengu_auto_updater_windows_npm_in_wsl', {
-        currentVersion:
-          MACRO.VERSION as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
-      })
-      // biome-ignore lint/suspicious/noConsole:: intentional console output
-      console.error(`
-Error: Windows NPM detected in WSL
-
-You're running Claude Code in WSL but using the Windows NPM installation from /mnt/c/.
-This configuration is not supported for updates.
-
-To fix this issue:
-  1. Install Node.js within your Linux distribution: e.g. sudo apt install nodejs npm
-  2. Make sure Linux NPM is in your PATH before the Windows version
-  3. Try updating again with 'claude update'
-`)
-      return 'install_failed'
-    }
-
-    const { hasPermissions } = await checkGlobalInstallPermissions()
-    if (!hasPermissions) {
-      return 'no_permissions'
-    }
-
-    // Use specific version if provided, otherwise use latest
-    const packageSpec = specificVersion
-      ? `${MACRO.PACKAGE_URL}@${specificVersion}`
-      : MACRO.PACKAGE_URL
-
-    // Run from home directory to avoid reading project-level .npmrc/.bunfig.toml
-    // which could be maliciously crafted to redirect to an attacker's registry
-    const packageManager = env.isRunningWithBun() ? 'bun' : 'npm'
-    const installResult = await execFileNoThrowWithCwd(
-      packageManager,
-      ['install', '-g', packageSpec],
-      { cwd: homedir() },
-    )
-    if (installResult.code !== 0) {
-      const error = new AutoUpdaterError(
-        `Failed to install new version of claude: ${installResult.stdout} ${installResult.stderr}`,
-      )
-      logError(error)
-      return 'install_failed'
-    }
-
-    // Set installMethod to 'global' to track npm global installations
-    saveGlobalConfig(current => ({
-      ...current,
-      installMethod: 'global',
-    }))
-
-    return 'success'
-  } finally {
-    // Ensure we always release the lock
-    await releaseLock()
-  }
+  void specificVersion
+  return 'install_failed'
 }
 
 /**

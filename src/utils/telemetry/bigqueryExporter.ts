@@ -44,18 +44,11 @@ export class BigQueryMetricsExporter implements PushMetricExporter {
   private isShutdown = false
 
   constructor(options: { timeout?: number } = {}) {
-    const defaultEndpoint = 'https://api.anthropic.com/api/claude_code/metrics'
+    const configuredEndpoint =
+      process.env.BETTER_CLAWD_METRICS_ENDPOINT ??
+      process.env.CLAUDE_CODE_METRICS_ENDPOINT
 
-    if (
-      process.env.USER_TYPE === 'ant' &&
-      process.env.ANT_CLAUDE_CODE_METRICS_ENDPOINT
-    ) {
-      this.endpoint =
-        process.env.ANT_CLAUDE_CODE_METRICS_ENDPOINT +
-        '/api/claude_code/metrics'
-    } else {
-      this.endpoint = defaultEndpoint
-    }
+    this.endpoint = configuredEndpoint ?? ''
 
     this.timeout = options.timeout || 5000
   }
@@ -111,6 +104,14 @@ export class BigQueryMetricsExporter implements PushMetricExporter {
 
       const payload = this.transformMetricsForInternal(metrics)
 
+      if (!this.endpoint) {
+        logForDebugging(
+          'BigQuery metrics export disabled: no Better-Clawd metrics endpoint configured',
+        )
+        resultCallback({ code: ExportResultCode.SUCCESS })
+        return
+      }
+
       const authResult = getAuthHeaders()
       if (authResult.error) {
         logForDebugging(`Metrics export failed: ${authResult.error}`)
@@ -153,7 +154,7 @@ export class BigQueryMetricsExporter implements PushMetricExporter {
     const attrs = metrics.resource.attributes
 
     const resourceAttributes: Record<string, string> = {
-      'service.name': (attrs['service.name'] as string) || 'claude-code',
+      'service.name': (attrs['service.name'] as string) || 'better-clawd',
       'service.version': (attrs['service.version'] as string) || 'unknown',
       'os.type': (attrs['os.type'] as string) || 'unknown',
       'os.version': (attrs['os.version'] as string) || 'unknown',

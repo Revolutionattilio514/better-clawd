@@ -1,9 +1,35 @@
-export const PRODUCT_URL = 'https://claude.com/claude-code'
+export const PRODUCT_NAME = 'Better-Clawd'
+export const LEGACY_PRODUCT_NAME = 'Claude Code'
+export const PRODUCT_SLUG = 'better-clawd'
+export const LEGACY_PRODUCT_SLUG = 'claude-code'
+export const CLI_BINARY_NAME = 'better-clawd'
+export const LEGACY_CLI_BINARY_NAME = 'claude'
+export const PRODUCT_CONFIG_DIRNAME = '.better-clawd'
+export const LEGACY_PRODUCT_CONFIG_DIRNAME = '.claude'
+export const PRODUCT_CONFIG_ENV_VAR = 'BETTER_CLAWD_CONFIG_DIR'
+export const LEGACY_PRODUCT_CONFIG_ENV_VAR = 'CLAUDE_CONFIG_DIR'
+export const PRODUCT_URL = 'https://github.com/x1xhlol/better-clawd'
+export const PRODUCT_ISSUES_URL =
+  'https://github.com/x1xhlol/better-clawd/issues'
+export const PRODUCT_NOREPLY_EMAIL = 'noreply@better-clawd.invalid'
 
-// Claude Code Remote session URLs
-export const CLAUDE_AI_BASE_URL = 'https://claude.ai'
-export const CLAUDE_AI_STAGING_BASE_URL = 'https://claude-ai.staging.ant.dev'
-export const CLAUDE_AI_LOCAL_BASE_URL = 'http://localhost:4000'
+// Anthropic web URLs are kept for the Anthropic provider and remote sessions.
+export const ANTHROPIC_APP_BASE_URL = 'https://claude.ai'
+export const ANTHROPIC_APP_STAGING_BASE_URL =
+  'https://claude-ai.staging.ant.dev'
+export const ANTHROPIC_APP_LOCAL_BASE_URL = 'http://localhost:4000'
+
+// Backward-compatible aliases while the Anthropic provider is still supported.
+export const CLAUDE_AI_BASE_URL = ANTHROPIC_APP_BASE_URL
+export const CLAUDE_AI_STAGING_BASE_URL = ANTHROPIC_APP_STAGING_BASE_URL
+export const CLAUDE_AI_LOCAL_BASE_URL = ANTHROPIC_APP_LOCAL_BASE_URL
+
+export function getConfiguredProductConfigDir(): string | undefined {
+  return (
+    process.env[PRODUCT_CONFIG_ENV_VAR] ??
+    process.env[LEGACY_PRODUCT_CONFIG_ENV_VAR]
+  )
+}
 
 /**
  * Determine if we're in a staging environment for remote sessions.
@@ -41,12 +67,12 @@ export function getClaudeAiBaseUrl(
   ingressUrl?: string,
 ): string {
   if (isRemoteSessionLocal(sessionId, ingressUrl)) {
-    return CLAUDE_AI_LOCAL_BASE_URL
+    return ANTHROPIC_APP_LOCAL_BASE_URL
   }
   if (isRemoteSessionStaging(sessionId, ingressUrl)) {
-    return CLAUDE_AI_STAGING_BASE_URL
+    return ANTHROPIC_APP_STAGING_BASE_URL
   }
-  return CLAUDE_AI_BASE_URL
+  return ANTHROPIC_APP_BASE_URL
 }
 
 /**

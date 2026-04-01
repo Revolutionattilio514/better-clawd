@@ -1,9 +1,14 @@
 import chalk from 'chalk'
 import { exec } from 'child_process'
 import { execa } from 'execa'
-import { mkdir, stat } from 'fs/promises'
+import { mkdir, readFile, stat } from 'fs/promises'
 import memoize from 'lodash-es/memoize.js'
+import { homedir } from 'os'
 import { join } from 'path'
+import {
+  PRODUCT_NAME,
+  PRODUCT_SLUG,
+} from 'src/constants/product.js'
 import { CLAUDE_AI_PROFILE_SCOPE } from 'src/constants/oauth.js'
 import {
   type AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
@@ -67,6 +72,7 @@ import {
 import {
   clearKeychainCache,
   getMacOsKeychainStorageServiceName,
+  getMacOsKeychainStorageServiceNames,
   getUsername,
 } from './secureStorage/macOsKeychainHelpers.js'
 import {
@@ -100,6 +106,10 @@ function isManagedOAuthContext(): boolean {
 export function isAnthropicAuthEnabled(): boolean {
   // --bare: API-key-only, never OAuth.
   if (isBareMode()) return false
+
+  if (getAPIProvider() !== 'firstParty') {
+    return false
+  }
 
   // `claude ssh` remote: ANTHROPIC_UNIX_SOCKET tunnels API calls through a
   // local auth-injecting proxy. The launcher sets CLAUDE_CODE_OAUTH_TOKEN as a
@@ -161,6 +171,10 @@ export function getAuthTokenSource() {
     return { source: 'none' as const, hasToken: false }
   }
 
+  if (getAPIProvider() !== 'firstParty') {
+    return { source: 'none' as const, hasToken: false }
+  }
+
   if (process.env.ANTHROPIC_AUTH_TOKEN && !isManagedOAuthContext()) {
     return { source: 'ANTHROPIC_AUTH_TOKEN' as const, hasToken: true }
   }
@@ -211,6 +225,20 @@ export type ApiKeySource =
   | '/login managed key'
   | 'none'
 
+export type OpenAIApiKeySource =
+  | 'OPENAI_API_KEY'
+  | 'OPENAI_ACCESS_TOKEN'
+  | 'CODEX_ACCESS_TOKEN'
+  | '/login managed OpenAI auth'
+  | '/login managed OpenAI key'
+  | 'none'
+
+export type OpenRouterApiKeySource =
+  | 'OPENROUTER_API_KEY'
+  | 'ANTHROPIC_AUTH_TOKEN'
+  | '/login managed OpenRouter key'
+  | 'none'
+
 export function getAnthropicApiKey(): null | string {
   const { key } = getAnthropicApiKeyWithSource()
   return key
@@ -221,6 +249,194 @@ export function hasAnthropicApiKeyAuth(): boolean {
     skipRetrievingKeyFromApiKeyHelper: true,
   })
   return key !== null && source !== 'none'
+}
+
+export function getOpenAIApiKey(): null | string {
+  return getOpenAIApiKeyWithSource().key
+}
+
+export function getOpenAIApiKeyWithSource(): {
+  key: null | string
+  source: OpenAIApiKeySource
+} {
+  if (process.env.OPENAI_API_KEY) {
+    return { key: process.env.OPENAI_API_KEY, source: 'OPENAI_API_KEY' }
+  }
+  if (process.env.OPENAI_ACCESS_TOKEN) {
+    return {
+      key: process.env.OPENAI_ACCESS_TOKEN,
+      source: 'OPENAI_ACCESS_TOKEN',
+    }
+  }
+  if (process.env.CODEX_ACCESS_TOKEN) {
+    return { key: process.env.CODEX_ACCESS_TOKEN, source: 'CODEX_ACCESS_TOKEN' }
+  }
+
+  const accessToken = getGlobalConfig().openAiAccessToken
+  if (accessToken) {
+    return { key: accessToken, source: '/login managed OpenAI auth' }
+  }
+
+  const key = getGlobalConfig().openAiApiKey
+  return key
+    ? { key, source: '/login managed OpenAI key' }
+    : { key: null, source: 'none' }
+}
+
+export function getOpenRouterApiKey(): null | string {
+  return getOpenRouterApiKeyWithSource().key
+}
+
+export function getOpenRouterApiKeyWithSource(): {
+  key: null | string
+  source: OpenRouterApiKeySource
+} {
+  if (process.env.OPENROUTER_API_KEY) {
+    return { key: process.env.OPENROUTER_API_KEY, source: 'OPENROUTER_API_KEY' }
+  }
+  if (process.env.ANTHROPIC_AUTH_TOKEN && getAPIProvider() === 'openrouter') {
+    return {
+      key: process.env.ANTHROPIC_AUTH_TOKEN,
+      source: 'ANTHROPIC_AUTH_TOKEN',
+    }
+  }
+
+  const key = getGlobalConfig().openRouterApiKey
+  return key
+    ? { key, source: '/login managed OpenRouter key' }
+    : { key: null, source: 'none' }
+}
+
+export function getConfiguredAuthProvider():
+  | 'anthropic'
+  | 'openrouter'
+  | 'openai' {
+  const storedProvider = getGlobalConfig().authProvider
+  if (storedProvider) {
+    return storedProvider
+  }
+
+  const provider = getAPIProvider()
+  switch (provider) {
+    case 'openrouter':
+      return 'openrouter'
+    case 'openai':
+      return 'openai'
+    default:
+      return 'anthropic'
+  }
+}
+
+export type OpenAIAuthTokens = {
+  accessToken: string
+  refreshToken?: string | null
+  expiresAt?: number | null
+  workspaceId?: string | null
+  lastRefresh?: string | number | null
+}
+
+export function getOpenAIAuthTokens(): OpenAIAuthTokens | null {
+  const config = getGlobalConfig()
+  if (!config.openAiAccessToken) {
+    return null
+  }
+
+  return {
+    accessToken: config.openAiAccessToken,
+    refreshToken: config.openAiRefreshToken,
+    expiresAt: config.openAiTokenExpiresAt,
+    workspaceId: config.openAiWorkspaceId,
+  }
+}
+
+export function saveOpenAIAuthTokens(tokens: OpenAIAuthTokens): void {
+  saveGlobalConfig(current => ({
+    ...current,
+    authProvider: 'openai',
+    openAiApiKey: undefined,
+    openAiAccessToken: tokens.accessToken,
+    openAiRefreshToken: tokens.refreshToken ?? undefined,
+    openAiTokenExpiresAt: tokens.expiresAt ?? undefined,
+    openAiWorkspaceId: tokens.workspaceId ?? undefined,
+  }))
+}
+
+function getCodexHomeDir(): string {
+  return process.env.CODEX_HOME || join(homedir(), '.codex')
+}
+
+export async function importOpenAIAuthFromCodexCache(): Promise<OpenAIAuthTokens> {
+  const authFilePath = join(getCodexHomeDir(), 'auth.json')
+  const raw = await readFile(authFilePath, 'utf8')
+  const parsed = jsonParse(raw) as {
+    auth_mode?: string
+    tokens?: {
+      access_token?: string
+      refresh_token?: string
+      expires_at?: number | string
+    }
+    workspace_id?: string
+    last_refresh?: string | number
+  }
+
+  const accessToken = parsed.tokens?.access_token
+  if (!accessToken) {
+    throw new Error(
+      `Codex auth cache at ${authFilePath} does not contain an access token.`,
+    )
+  }
+
+  const expiresAtRaw = parsed.tokens?.expires_at
+  const expiresAt =
+    typeof expiresAtRaw === 'number'
+      ? expiresAtRaw
+      : typeof expiresAtRaw === 'string'
+        ? Date.parse(expiresAtRaw)
+        : undefined
+
+  const tokens = {
+    accessToken,
+    refreshToken: parsed.tokens?.refresh_token,
+    expiresAt: Number.isFinite(expiresAt) ? expiresAt : undefined,
+    workspaceId: parsed.workspace_id,
+    lastRefresh: parsed.last_refresh,
+  } satisfies OpenAIAuthTokens
+
+  saveOpenAIAuthTokens(tokens)
+  return tokens
+}
+
+export async function runCodexLogin(opts?: {
+  deviceAuth?: boolean
+}): Promise<OpenAIAuthTokens> {
+  const args = ['login']
+  if (opts?.deviceAuth) {
+    args.push('--device-auth')
+  }
+
+  const result = await execa('codex', args, {
+    stdio: 'inherit',
+    reject: false,
+  })
+  if (result.exitCode !== 0) {
+    throw new Error(`codex ${args.join(' ')} exited with code ${result.exitCode}`)
+  }
+
+  return importOpenAIAuthFromCodexCache()
+}
+
+export async function refreshOpenAIAuthTokenIfNeeded(): Promise<boolean> {
+  const tokens = getOpenAIAuthTokens()
+  if (!tokens?.expiresAt || Date.now() < tokens.expiresAt) {
+    return false
+  }
+
+  try {
+    await importOpenAIAuthFromCodexCache()
+    return true
+  } catch {
+    return false
+  }
 }
 
 export function getAnthropicApiKeyWithSource(
@@ -1063,13 +1279,14 @@ export const getApiKeyFromConfigOrMacOSKeychain = memoize(
         }
         // Prefetch completed with no key — fall through to config, not keychain.
       } else {
-        const storageServiceName = getMacOsKeychainStorageServiceName()
         try {
-          const result = execSyncWithDefaults_DEPRECATED(
-            `security find-generic-password -a $USER -w -s "${storageServiceName}"`,
-          )
-          if (result) {
-            return { key: result, source: '/login managed key' }
+          for (const storageServiceName of getMacOsKeychainStorageServiceNames()) {
+            const result = execSyncWithDefaults_DEPRECATED(
+              `security find-generic-password -a $USER -w -s "${storageServiceName}"`,
+            )
+            if (result) {
+              return { key: result, source: '/login managed key' }
+            }
           }
         } catch (e) {
           logError(e)
@@ -1159,6 +1376,36 @@ export async function saveApiKey(apiKey: string): Promise<void> {
   clearLegacyApiKeyPrefetch()
 }
 
+export async function saveOpenAIApiKey(apiKey: string): Promise<void> {
+  if (!isValidApiKey(apiKey)) {
+    throw new Error(
+      'Invalid API key format. API key must contain only alphanumeric characters, dashes, and underscores.',
+    )
+  }
+  saveGlobalConfig(current => ({
+    ...current,
+    authProvider: 'openai',
+    openAiAccessToken: undefined,
+    openAiRefreshToken: undefined,
+    openAiTokenExpiresAt: undefined,
+    openAiWorkspaceId: undefined,
+    openAiApiKey: apiKey,
+  }))
+}
+
+export async function saveOpenRouterApiKey(apiKey: string): Promise<void> {
+  if (!isValidApiKey(apiKey)) {
+    throw new Error(
+      'Invalid API key format. API key must contain only alphanumeric characters, dashes, and underscores.',
+    )
+  }
+  saveGlobalConfig(current => ({
+    ...current,
+    authProvider: 'openrouter',
+    openRouterApiKey: apiKey,
+  }))
+}
+
 export function isCustomApiKeyApproved(apiKey: string): boolean {
   const config = getGlobalConfig()
   const normalizedKey = normalizeApiKeyForConfig(apiKey)
@@ -1180,6 +1427,24 @@ export async function removeApiKey(): Promise<void> {
   // Clear memo cache
   getApiKeyFromConfigOrMacOSKeychain.cache.clear?.()
   clearLegacyApiKeyPrefetch()
+}
+
+export async function removeOpenAIApiKey(): Promise<void> {
+  saveGlobalConfig(current => ({
+    ...current,
+    openAiApiKey: undefined,
+    openAiAccessToken: undefined,
+    openAiRefreshToken: undefined,
+    openAiTokenExpiresAt: undefined,
+    openAiWorkspaceId: undefined,
+  }))
+}
+
+export async function removeOpenRouterApiKey(): Promise<void> {
+  saveGlobalConfig(current => ({
+    ...current,
+    openRouterApiKey: undefined,
+  }))
 }
 
 async function maybeRemoveApiKeyFromMacOSKeychain(): Promise<void> {
@@ -1716,15 +1981,15 @@ export function getSubscriptionName(): string {
 
   switch (subscriptionType) {
     case 'enterprise':
-      return 'Claude Enterprise'
+      return 'Anthropic Enterprise'
     case 'team':
-      return 'Claude Team'
+      return 'Anthropic Team'
     case 'max':
-      return 'Claude Max'
+      return 'Anthropic Max'
     case 'pro':
-      return 'Claude Pro'
+      return 'Anthropic Pro'
     default:
-      return 'Claude API'
+      return `${PRODUCT_NAME} API`
   }
 }
 
@@ -1964,8 +2229,8 @@ export async function validateForceLoginOrg(): Promise<OrgValidationResult> {
         `Unable to verify organization for the current authentication token.\n` +
         `This machine requires organization ${requiredOrgUuid} but the profile could not be fetched.\n` +
         `This may be a network error, or the token may lack the user:profile scope required for\n` +
-        `verification (tokens from 'claude setup-token' do not include this scope).\n` +
-        `Try again, or obtain a full-scope token via 'claude auth login'.`,
+        `verification (tokens from 'better-clawd setup-token' do not include this scope).\n` +
+        `Try again, or obtain a full-scope token via 'better-clawd auth login'.`,
     }
   }
 
@@ -1995,7 +2260,7 @@ export async function validateForceLoginOrg(): Promise<OrgValidationResult> {
     message:
       `Your authentication token belongs to organization ${tokenOrgUuid},\n` +
       `but this machine requires organization ${requiredOrgUuid}.\n\n` +
-      `Please log in with the correct organization: claude auth login`,
+      `Please log in with the correct organization: better-clawd auth login`,
   }
 }
 

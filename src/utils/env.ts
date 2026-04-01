@@ -1,6 +1,11 @@
 import memoize from 'lodash-es/memoize.js'
 import { homedir } from 'os'
 import { join } from 'path'
+import {
+  getConfiguredProductConfigDir,
+  LEGACY_PRODUCT_SLUG,
+  PRODUCT_SLUG,
+} from '../constants/product.js'
 import { fileSuffixForOauthConfig } from '../constants/oauth.js'
 import { isRunningWithBun } from './bundledMode.js'
 import { getClaudeConfigHomeDir, isEnvTruthy } from './envUtils.js'
@@ -12,17 +17,29 @@ type Platform = 'win32' | 'darwin' | 'linux'
 
 // Config and data paths
 export const getGlobalClaudeFile = memoize((): string => {
+  const configHomeDir = getClaudeConfigHomeDir()
+  const configDirOverride = getConfiguredProductConfigDir()
+
   // Legacy fallback for backwards compatibility
-  if (
-    getFsImplementation().existsSync(
-      join(getClaudeConfigHomeDir(), '.config.json'),
-    )
-  ) {
-    return join(getClaudeConfigHomeDir(), '.config.json')
+  const legacyConfigPath = join(configHomeDir, '.config.json')
+  if (getFsImplementation().existsSync(legacyConfigPath)) {
+    return legacyConfigPath
   }
 
-  const filename = `.claude${fileSuffixForOauthConfig()}.json`
-  return join(process.env.CLAUDE_CONFIG_DIR || homedir(), filename)
+  const suffix = fileSuffixForOauthConfig()
+  const preferredFilename = `.${PRODUCT_SLUG}${suffix}.json`
+  const legacyFilename = `.${LEGACY_PRODUCT_SLUG}${suffix}.json`
+  const preferredPath = join(configDirOverride || homedir(), preferredFilename)
+  const legacyPath = join(configDirOverride || homedir(), legacyFilename)
+
+  if (getFsImplementation().existsSync(preferredPath)) {
+    return preferredPath
+  }
+  if (getFsImplementation().existsSync(legacyPath)) {
+    return legacyPath
+  }
+
+  return preferredPath
 })
 
 const hasInternetAccess = memoize(async (): Promise<boolean> => {

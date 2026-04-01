@@ -620,12 +620,25 @@ export const SettingsSchema = lazySchema(() =>
             'these exact sources are blocked from being added as marketplaces. The check happens BEFORE ' +
             'downloading, so blocked sources never touch the filesystem.',
         ),
-      // Force a specific login method: 'claudeai' for Claude Pro/Max, 'console' for Console billing
-      forceLoginMethod: z
-        .enum(['claudeai', 'console'])
+      apiProvider: z
+        .enum([
+          'anthropic',
+          'openrouter',
+          'openai',
+          'bedrock',
+          'vertex',
+          'foundry',
+        ])
         .optional()
         .describe(
-          'Force a specific login method: "claudeai" for Claude Pro/Max, "console" for Console billing',
+          'Preferred model provider for Better-Clawd sessions. Falls back to compatible legacy Claude/Anthropic environment variables when unset.',
+        ),
+      // Force a specific login method: 'claudeai' for Claude Pro/Max, 'console' for Console billing
+      forceLoginMethod: z
+        .enum(['claudeai', 'console', 'openai', 'codex', 'openrouter'])
+        .optional()
+        .describe(
+          'Force a specific login method: "claudeai" for Anthropic subscriptions, "console" for Anthropic API billing, "openai"/"codex" for OpenAI auth, or "openrouter" for OpenRouter key auth.',
         ),
       // Organization UUID to use for OAuth login (will be added as URL param to authorization URL)
       forceLoginOrgUUID: z

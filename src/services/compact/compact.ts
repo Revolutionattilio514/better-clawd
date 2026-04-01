@@ -748,8 +748,9 @@ export async function compactConversation(
     }
   } catch (error) {
     // Only show the error notification for manual /compact.
-    // Auto-compact failures are retried on the next turn and the
-    // notification is confusing when compaction eventually succeeds.
+    // Auto-compact failures are retried silently until the session-level
+    // circuit breaker trips, and a user-facing notification here would be
+    // noisy for failures that recover on a later turn.
     if (!isAutoCompact) {
       addErrorNotificationIfNeeded(error, context)
     }

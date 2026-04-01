@@ -7,6 +7,7 @@ import {
   CREDENTIALS_SERVICE_SUFFIX,
   clearKeychainCache,
   getMacOsKeychainStorageServiceName,
+  getMacOsKeychainStorageServiceNames,
   getUsername,
   KEYCHAIN_CACHE_TTL_MS,
   keychainCacheState,
@@ -32,17 +33,18 @@ export const macOsKeychainStorage = {
     }
 
     try {
-      const storageServiceName = getMacOsKeychainStorageServiceName(
-        CREDENTIALS_SERVICE_SUFFIX,
-      )
       const username = getUsername()
-      const result = execSyncWithDefaults_DEPRECATED(
-        `security find-generic-password -a "${username}" -w -s "${storageServiceName}"`,
-      )
-      if (result) {
-        const data = jsonParse(result)
-        keychainCacheState.cache = { data, cachedAt: Date.now() }
-        return data
+      for (const storageServiceName of getMacOsKeychainStorageServiceNames(
+        CREDENTIALS_SERVICE_SUFFIX,
+      )) {
+        const result = execSyncWithDefaults_DEPRECATED(
+          `security find-generic-password -a "${username}" -w -s "${storageServiceName}"`,
+        )
+        if (result) {
+          const data = jsonParse(result)
+          keychainCacheState.cache = { data, cachedAt: Date.now() }
+          return data
+        }
       }
     } catch (_e) {
       // fall through
@@ -161,14 +163,21 @@ export const macOsKeychainStorage = {
     clearKeychainCache()
 
     try {
-      const storageServiceName = getMacOsKeychainStorageServiceName(
-        CREDENTIALS_SERVICE_SUFFIX,
-      )
       const username = getUsername()
-      execSyncWithDefaults_DEPRECATED(
-        `security delete-generic-password -a "${username}" -s "${storageServiceName}"`,
-      )
-      return true
+      let deleted = false
+      for (const storageServiceName of getMacOsKeychainStorageServiceNames(
+        CREDENTIALS_SERVICE_SUFFIX,
+      )) {
+        try {
+          execSyncWithDefaults_DEPRECATED(
+            `security delete-generic-password -a "${username}" -s "${storageServiceName}"`,
+          )
+          deleted = true
+        } catch {
+          // Best-effort delete for legacy entries.
+        }
+      }
+      return deleted
     } catch (_e) {
       return false
     }
@@ -177,17 +186,18 @@ export const macOsKeychainStorage = {
 
 async function doReadAsync(): Promise<SecureStorageData | null> {
   try {
-    const storageServiceName = getMacOsKeychainStorageServiceName(
-      CREDENTIALS_SERVICE_SUFFIX,
-    )
     const username = getUsername()
-    const { stdout, code } = await execFileNoThrow(
-      'security',
-      ['find-generic-password', '-a', username, '-w', '-s', storageServiceName],
-      { useCwd: false, preserveOutputOnError: false },
-    )
-    if (code === 0 && stdout) {
-      return jsonParse(stdout.trim())
+    for (const storageServiceName of getMacOsKeychainStorageServiceNames(
+      CREDENTIALS_SERVICE_SUFFIX,
+    )) {
+      const { stdout, code } = await execFileNoThrow(
+        'security',
+        ['find-generic-password', '-a', username, '-w', '-s', storageServiceName],
+        { useCwd: false, preserveOutputOnError: false },
+      )
+      if (code === 0 && stdout) {
+        return jsonParse(stdout.trim())
+      }
     }
   } catch (_e) {
     // fall through

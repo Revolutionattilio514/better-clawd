@@ -34,6 +34,12 @@ import {
   type AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
   logEvent,
 } from 'src/services/analytics/index.js'
+import {
+  CLI_BINARY_NAME,
+  LEGACY_CLI_BINARY_NAME,
+  PRODUCT_NAME,
+  PRODUCT_SLUG,
+} from 'src/constants/product.js'
 import { getMaxVersion, shouldSkipVersion } from '../autoUpdater.js'
 import { registerCleanup } from '../cleanupRegistry.js'
 import { getGlobalConfig, saveGlobalConfig } from '../config.js'
@@ -109,24 +115,34 @@ export function getPlatform(): string {
 }
 
 export function getBinaryName(platform: string): string {
-  return platform.startsWith('win32') ? 'claude.exe' : 'claude'
+  return platform.startsWith('win32')
+    ? `${LEGACY_CLI_BINARY_NAME}.exe`
+    : LEGACY_CLI_BINARY_NAME
+}
+
+export function getPreferredBinaryName(platform: string): string {
+  return platform.startsWith('win32')
+    ? `${CLI_BINARY_NAME}.exe`
+    : CLI_BINARY_NAME
 }
 
 function getBaseDirectories() {
   const platform = getPlatform()
   const executableName = getBinaryName(platform)
+  const preferredExecutableName = getPreferredBinaryName(platform)
 
   return {
     // Data directories (permanent storage)
-    versions: join(getXDGDataHome(), 'claude', 'versions'),
+    versions: join(getXDGDataHome(), PRODUCT_SLUG, 'versions'),
 
     // Cache directories (can be deleted)
-    staging: join(getXDGCacheHome(), 'claude', 'staging'),
+    staging: join(getXDGCacheHome(), PRODUCT_SLUG, 'staging'),
 
     // State directories
-    locks: join(getXDGStateHome(), 'claude', 'locks'),
+    locks: join(getXDGStateHome(), PRODUCT_SLUG, 'locks'),
 
-    // User bin
+    // User bin. Keep the legacy `claude` alias during migration.
+    preferredExecutable: join(getUserBinDir(), preferredExecutableName),
     executable: join(getUserBinDir(), executableName),
   }
 }
@@ -465,8 +481,11 @@ async function performVersionUpdate(
     logForDebugging(`Version ${version} already installed, updating symlink`)
   }
 
-  // Create direct symlink from ~/.local/bin/claude to the version binary
+  // Create direct symlinks for the canonical Better-Clawd launcher and the
+  // legacy `claude` compatibility alias.
+  await removeDirectoryIfEmpty(getBaseDirectories().preferredExecutable)
   await removeDirectoryIfEmpty(executablePath)
+  await updateSymlink(getBaseDirectories().preferredExecutable, installPath)
   await updateSymlink(executablePath, installPath)
 
   // Verify the executable was actually created/updated
@@ -1458,7 +1477,7 @@ async function isNpmSymlink(executablePath: string): Promise<boolean> {
 }
 
 /**
- * Remove the claude symlink from the executable directory
+ * Remove the Better-Clawd and legacy claude symlinks from the executable directory
  * This is used when switching away from native installation
  * Will only remove if it's a native binary symlink, not npm-managed JS files
  */
@@ -1467,21 +1486,29 @@ export async function removeInstalledSymlink(): Promise<void> {
 
   try {
     // Check if this is an npm-managed installation
-    if (await isNpmSymlink(dirs.executable)) {
+    if (
+      (await isNpmSymlink(dirs.executable)) ||
+      (await isNpmSymlink(dirs.preferredExecutable))
+    ) {
       logForDebugging(
-        `Skipping removal of ${dirs.executable} - appears to be npm-managed`,
+        `Skipping removal of ${dirs.preferredExecutable} / ${dirs.executable} - appears to be npm-managed`,
       )
       return
     }
 
-    // It's a native binary symlink, safe to remove
-    await unlink(dirs.executable)
-    logForDebugging(`Removed claude symlink at ${dirs.executable}`)
+    // They're native binary symlinks, safe to remove.
+    await Promise.allSettled([
+      unlink(dirs.preferredExecutable),
+      unlink(dirs.executable),
+    ])
+    logForDebugging(
+      `Removed ${PRODUCT_NAME} symlinks at ${dirs.preferredExecutable} and ${dirs.executable}`,
+    )
   } catch (error) {
     if (isENOENT(error)) {
       return
     }
-    logError(new Error(`Failed to remove claude symlink: ${error}`))
+    logError(new Error(`Failed to remove ${PRODUCT_NAME} symlinks: ${error}`))
   }
 }
 
