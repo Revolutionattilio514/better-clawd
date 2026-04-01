@@ -11,7 +11,11 @@ import { getDisplayPath } from './file.js';
 import { formatNumber } from './format.js';
 import { getIdeClientName, type IDEExtensionInstallationStatus, isJetBrainsIde, toIDEDisplayName } from './ide.js';
 import { getClaudeAiUserDefaultModelDescription, modelDisplayString } from './model/model.js';
-import { getAPIProvider } from './model/providers.js';
+import {
+  getAPIProvider,
+  getOpenAIBaseUrl,
+  getOpenRouterBaseUrl,
+} from './model/providers.js';
 import { getMTLSConfig } from './mtls.js';
 import { checkInstall } from './nativeInstaller/index.js';
 import { getProxyUrl } from './proxy.js';
@@ -264,15 +268,12 @@ export function buildAPIProviderProperties(): Property[] {
   } else if (apiProvider === 'openrouter') {
     properties.push({
       label: 'OpenRouter base URL',
-      value:
-        process.env.OPENROUTER_BASE_URL ||
-        process.env.ANTHROPIC_BASE_URL ||
-        'https://openrouter.ai/api/v1'
+      value: getOpenRouterBaseUrl()
     });
   } else if (apiProvider === 'openai') {
     properties.push({
       label: 'OpenAI base URL',
-      value: process.env.OPENAI_BASE_URL || 'https://api.openai.com/v1'
+      value: getOpenAIBaseUrl()
     });
   } else if (apiProvider === 'bedrock') {
     const bedrockBaseUrl = process.env.BEDROCK_BASE_URL;

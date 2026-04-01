@@ -9,6 +9,40 @@ export type APIProvider =
   | 'vertex'
   | 'foundry'
 
+function getStoredProviderPreference(): APIProvider | null {
+  try {
+    // Read the global config file directly so provider selection works even
+    // before the guarded config loader is enabled during startup.
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const { readFileSync } = require('fs') as typeof import('fs')
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const { getGlobalClaudeFile } =
+      require('../env.js') as typeof import('../env.js')
+    const raw = readFileSync(getGlobalClaudeFile(), 'utf8')
+    const config = JSON.parse(raw) as {
+      authProvider?: 'anthropic' | 'openrouter' | 'openai'
+      openRouterApiKey?: string
+      openAiApiKey?: string
+      openAiAccessToken?: string
+    }
+
+    switch (config.authProvider) {
+      case 'openrouter':
+        return config.openRouterApiKey ? 'openrouter' : null
+      case 'openai':
+        return config.openAiApiKey || config.openAiAccessToken
+          ? 'openai'
+          : null
+      case 'anthropic':
+        return 'firstParty'
+      default:
+        return null
+    }
+  } catch {
+    return null
+  }
+}
+
 function getExplicitProviderOverride(): APIProvider | null {
   const rawProvider =
     process.env.BETTER_CLAWD_API_PROVIDER ??
@@ -65,7 +99,30 @@ export function isOpenAIConfigured(): boolean {
 }
 
 export function getOpenRouterBaseUrl(): string {
-  return process.env.OPENROUTER_BASE_URL ?? 'https://openrouter.ai/api/v1'
+  const configuredBaseUrl = process.env.OPENROUTER_BASE_URL
+  const fallbackBaseUrl = 'https://openrouter.ai/api'
+  if (!configuredBaseUrl) {
+    return fallbackBaseUrl
+  }
+
+  try {
+    const url = new URL(configuredBaseUrl)
+
+    if (url.host === 'openrouter.ai') {
+      const normalizedPath = url.pathname.replace(/\/+$/, '')
+      if (normalizedPath === '' || normalizedPath === '/') {
+        url.pathname = '/api'
+      } else if (normalizedPath === '/api/v1') {
+        // Anthropic SDK appends /v1/messages itself, so OpenRouter's SDK base
+        // must stop at /api rather than /api/v1.
+        url.pathname = '/api'
+      }
+    }
+
+    return url.toString().replace(/\/$/, '')
+  } catch {
+    return configuredBaseUrl
+  }
 }
 
 export function getOpenAIBaseUrl(): string {
@@ -88,7 +145,7 @@ export function getAPIProvider(): APIProvider {
           ? 'openai'
           : isOpenRouterConfigured()
             ? 'openrouter'
-            : 'firstParty'
+            : getStoredProviderPreference() ?? 'firstParty'
 }
 
 export function getAPIProviderForStatsig(): AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS {

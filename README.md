@@ -64,7 +64,7 @@ Default endpoints:
 
 - OpenAI base URL: `https://api.openai.com/v1`
 - OpenAI websocket mode endpoint: `wss://api.openai.com/v1/responses`
-- OpenRouter base URL: `https://openrouter.ai/api/v1`
+- OpenRouter Anthropic-compatible base URL: `https://openrouter.ai/api`
 - OpenRouter Responses API: `https://openrouter.ai/api/v1/responses`
 
 ## Quick Start
@@ -91,7 +91,7 @@ OpenRouter:
 ```bash
 BETTER_CLAWD_API_PROVIDER=openrouter
 OPENROUTER_API_KEY=your_key_here
-OPENROUTER_BASE_URL=https://openrouter.ai/api/v1
+OPENROUTER_BASE_URL=https://openrouter.ai/api
 ```
 
 ## What You Get

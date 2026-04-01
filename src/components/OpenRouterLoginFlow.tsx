@@ -45,8 +45,8 @@ export function OpenRouterLoginFlow({
           <Text>Configuring OpenRouter login for Better-Clawd...</Text>
         </Box>
         <Text dimColor={true}>
-          OpenRouter support uses your OpenRouter API key with the Responses API
-          endpoint.
+          OpenRouter support uses your OpenRouter API key with the
+          Anthropic-compatible Messages API endpoint.
         </Text>
       </Box>
     )
@@ -59,8 +59,8 @@ export function OpenRouterLoginFlow({
           'Better-Clawd can use OpenRouter with your OpenRouter API key.'}
       </Text>
       <Text dimColor={true}>
-        Paste your OpenRouter key to use `https://openrouter.ai/api/v1` and the
-        Responses API compatibility layer.
+        Paste your OpenRouter key to use the Anthropic-compatible OpenRouter base
+        URL at `https://openrouter.ai/api`.
       </Text>
       <Box>
         <Text>Paste your OpenRouter API key:</Text>

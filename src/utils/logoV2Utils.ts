@@ -9,6 +9,7 @@ import {
   truncateToWidth,
   truncateToWidthNoEllipsis,
 } from './format.js'
+import { getAPIProvider } from './model/providers.js'
 import { getStoredChangelogFromMemory, parseChangelog } from './releaseNotes.js'
 import { gt } from './semver.js'
 import { loadMessageLogs } from './sessionStorage.js'
@@ -253,9 +254,20 @@ export function getLogoDisplayData(): {
   const cwd = serverUrl
     ? `${displayPath} in ${serverUrl.replace(/^https?:\/\//, '')}`
     : displayPath
+  const apiProvider = getAPIProvider()
   const billingType = isClaudeAISubscriber()
     ? getSubscriptionName()
-    : 'API Usage Billing'
+    : apiProvider === 'openrouter'
+      ? 'OpenRouter'
+      : apiProvider === 'openai'
+        ? 'OpenAI'
+        : apiProvider === 'bedrock'
+          ? 'AWS Bedrock'
+          : apiProvider === 'vertex'
+            ? 'Google Vertex AI'
+            : apiProvider === 'foundry'
+              ? 'Microsoft Foundry'
+              : 'API Usage Billing'
   const agentName = getInitialSettings().agent
 
   return {
