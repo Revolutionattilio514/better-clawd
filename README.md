@@ -6,7 +6,7 @@ Better-Clawd exists because the original had a genuinely great core idea and too
 
 No telemetry. No vendor lock-in. Better long-session performance. Less corporate baggage.
 
-[NPM package](https://www.npmjs.com/package/better-clawd) • [GitHub repo](https://github.com/x1xhlol/better-clawd)
+[NPM package](https://www.npmjs.com/package/better-clawd) 
 
 ## Install
 
