@@ -4,6 +4,7 @@ import { env } from '../utils/env.js'
 import { execFileNoThrow } from '../utils/execFileNoThrow.js'
 import { executeNotificationHooks } from '../utils/hooks.js'
 import { logError } from '../utils/log.js'
+import { PRODUCT_NAME } from '../constants/product.js'
 import {
   type AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
   logEvent,
@@ -35,7 +36,7 @@ export async function sendNotification(
   })
 }
 
-const DEFAULT_TITLE = 'Claude Code'
+const DEFAULT_TITLE = PRODUCT_NAME
 
 async function sendToChannel(
   channel: string,

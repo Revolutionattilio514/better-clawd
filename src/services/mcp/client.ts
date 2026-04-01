@@ -43,7 +43,11 @@ import pMap from 'p-map'
 import { getOriginalCwd, getSessionId } from '../../bootstrap/state.js'
 import type { Command } from '../../commands.js'
 import { getOauthConfig } from '../../constants/oauth.js'
-import { PRODUCT_URL } from '../../constants/product.js'
+import {
+  PRODUCT_NAME,
+  PRODUCT_SLUG,
+  PRODUCT_URL,
+} from '../../constants/product.js'
 import type { AppState } from '../../state/AppState.js'
 import {
   type Tool,
@@ -984,10 +988,10 @@ export const connectToServer = memoize(
 
       const client = new Client(
         {
-          name: 'claude-code',
-          title: 'Claude Code',
+          name: PRODUCT_SLUG,
+          title: PRODUCT_NAME,
           version: MACRO.VERSION ?? 'unknown',
-          description: "Anthropic's agentic coding tool",
+          description: `${PRODUCT_NAME} MCP client`,
           websiteUrl: PRODUCT_URL,
         },
         {
@@ -3279,10 +3283,10 @@ export async function setupSdkMcpClients(
 
       const client = new Client(
         {
-          name: 'claude-code',
-          title: 'Claude Code',
+          name: PRODUCT_SLUG,
+          title: PRODUCT_NAME,
           version: MACRO.VERSION ?? 'unknown',
-          description: "Anthropic's agentic coding tool",
+          description: `${PRODUCT_NAME} MCP client`,
           websiteUrl: PRODUCT_URL,
         },
         {
